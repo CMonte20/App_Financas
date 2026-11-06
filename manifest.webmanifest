@@ -7,6 +7,26 @@
  "display": "standalone",
  "background_color": "#F1F4F1",
  "theme_color": "#0B6B4E",
+ "share_target": {
+  "action": "./compartilhar",
+  "method": "POST",
+  "enctype": "multipart/form-data",
+  "params": {
+   "files": [
+    {
+     "name": "fatura",
+     "accept": [
+      "application/pdf",
+      ".pdf",
+      "text/csv",
+      ".csv",
+      ".ofx",
+      "text/plain"
+     ]
+    }
+   ]
+  }
+ },
  "icons": [
   {
    "src": "icon-192.png",

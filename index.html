@@ -543,6 +543,7 @@ const CAT_DEF=[
  ['Reserva de emergência','Investimento',0,'reserva de emergencia|reserva'],
  ['Investimento','Investimento',0,''],
  ['Amortização','Amortização',0,'amortiza'],
+ ['Pagamento adiantado','',0,'pago antes do fechamento'],
  ['Outros','',0,''],
 ];
 const CAT_KW=CAT_DEF.map(([n,,,kw])=>[n,kw.split('|').filter(Boolean)]);
@@ -590,7 +591,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.9';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.0';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],['patrimonio','Patrimônio','<path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -1314,15 +1315,23 @@ function viewConciliacao(){
   const totDepois=r2(sum(R.ok,m=>m.r.valor)+sum(R.dif.filter(m=>m.usar),m=>m.r.valor)+sum(R.dif.filter(m=>!m.usar),m=>m.e.valor)+sum(R.novo.filter(r=>r.on),r=>r.valor)+sum(R.falt.filter(f=>f.acao==='manter'),f=>f.e.valor));
   const rowsLidos=r2(sum(I.rows.filter(r=>r.tipo!=='pagamento'),r=>r.valor));
   const base=I.compras!=null?I.compras:totPdf; const adiant=I.compras!=null&&totPdf!=null?r2(I.compras-totPdf):0; I.adiantado=adiant>0.05?adiant:0;
-  let falta=base!=null?r2(base-totDepois):0; if(Math.abs(falta)<=0.05) falta=0; I.falta=falta;
+  let falta=base!=null?r2(base-totDepois):0; if(Math.abs(falta)<=0.05) falta=0; I.falta=falta; I.totDepois=totDepois;
   let totMsg='';
   if(base!=null){ const d=r2(base-rowsLidos), rot=I.compras!=null?'o total de compras da fatura':'o total da fatura';
     totMsg=Math.abs(d)<=0.05?`<div class="hint small" style="background:var(--accent-soft)">✓ As compras lidas somam ${rot}: <b>${brl(base)}</b>${Math.abs(d)>=0.005?` (diferença de ${brl(Math.abs(d))} de arredondamento do banco)`:''}.</div>`
     :d>0?`<div class="hint small">${cap(rot)} é <b>${brl(base)}</b>, mas as compras que o app conseguiu ler somam <b>${brl(rowsLidos)}</b>. Faltaram <b>${brl(d)}</b>: pode ser juros ou linhas que o app não entendeu.</div>`
     :`<div class="hint small">O app leu <b>${brl(-d)}</b> a mais que ${rot} (${brl(base)}). Confira se há crédito ou estorno que não foi lido, ou uma linha repetida.</div>`;
-    if(I.adiantado) totMsg+=`<div class="hint small">Você já pagou <b>${brl(I.adiantado)}</b> desta fatura antes de ela fechar. Compras do mês: ${brl(I.compras)} · falta pagar: <b>${brl(totPdf)}</b>.</div>`;
+    if(I.adiantado){ const ant=(String(I.text||'').match(/fatura anterior[^0-9\n]{0,15}(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/i)||[])[1]; const vAnt=ant?parseBRL(ant):null;
+      const pg=(I.rows||[]).filter(r=>r.tipo==='pagamento').map(r=>({d:r.data,v:Math.abs(r.valor)})); let usadoAnt=false; const adi=pg.filter(x=>{ if(!usadoAnt&&vAnt!=null&&Math.abs(x.v-vAnt)<0.01){ usadoAnt=true; return false; } return true; });
+      const bate=Math.abs(sum(adi,x=>x.v)-I.adiantado)<0.05;
+      totMsg+=`<div class="hint small grid" style="gap:4px"><b>Conta da fatura</b>
+        <span>Compras do período: <b>${brl(I.compras)}</b></span>
+        <span>− Pagamentos feitos antes do fechamento: <b>${brl(I.adiantado)}</b>${bate&&adi.length?` (${adi.map(x=>esc(x.d)+' '+brl(x.v)).join(' · ')})`:''}</span>
+        <span>= Falta pagar: <b>${brl(totPdf)}</b> ${Math.abs(r2(I.compras-I.adiantado)-totPdf)<0.05?'✓ igual à fatura':''}</span>
+        ${vAnt!=null&&usadoAnt?`<span class="muted">O pagamento de ${brl(vAnt)} quitou a fatura anterior e não entra nesta conta.</span>`:''}</div>`; }
     else if(I.compras!=null&&totPdf!=null&&totPdf-I.compras>0.05) totMsg+=`<div class="hint small">A fatura cobra ${brl(r2(totPdf-I.compras))} além das compras do mês (saldo da fatura anterior ou encargos).</div>`; }
   else totMsg=`<div class="hint small">Não achei o total impresso na fatura. Confira com o valor que o banco cobra: as compras lidas somam ${brl(rowsLidos)}.</div>`;
+  if(I.adiantado){ const pg=(I.rows||[]).filter(r=>r.tipo==='pagamento'&&/^\d{2}\/\d{2}/.test(r.data||'')); const ms=pg.map(r=>{ const mm=+r.data.slice(3,5); let y=+I.mes.slice(0,4); if(mm>+I.mes.slice(5)) y--; return y+'-'+String(mm).padStart(2,'0'); }).sort(); I.mesAdiant=ms[ms.length-1]||addM(I.mes,-1); }
   const fixosCard=calc(I.mes).des.filter(d=>d.cartao===I.card&&d.cardNome).map(d=>({...d,v:d.estimado}));
   return `<section class="card grid">
     <div class="sechead"><h2>Conferência da fatura</h2><span class="muted small">${I.how==='claude'?'lido pelo Claude':'leitura automática'}</span></div>
@@ -1357,7 +1366,9 @@ function viewConciliacao(){
     ${fixosCard.length&&!prevMode?`<div class="hint small">${fixosCard.map(d=>`<b>${esc(d.desc)}</b> (${brl(d.v)})`).join(', ')} ${fixosCard.length>1?'são estimativas':'é uma estimativa'} de conta fixa paga com este cartão. Depois de aplicar, essa estimativa sai do mês e vale o que veio na fatura.</div>`:''}
     ${!I.rows.length?`<div class="err">Não encontrei lançamentos neste arquivo.${totPdf!=null?' Mas achei o total da fatura: você pode lançar só ele.':''}</div>`:''}
     ${!prevMode&&base!=null&&falta>0.009?`<label class="check"><input type="checkbox" id="impFalta" ${I.lancFalta!==false?'checked':''}> Lançar <b>${brl(falta)}</b> como "valor não detalhado" para o cartão ficar igual à fatura</label>`:''}
-    <div class="revbar"><span class="num small">Depois de aplicar, o cartão fica com <b>${brl(r2(totDepois+(!prevMode&&falta>0.009&&I.lancFalta!==false?falta:0)))}</b>${base!=null?` · fatura ${brl(base)}`:''}</span><span style="margin-left:auto" class="btnrow"><button class="btn" data-act="impreset">Cancelar</button><button class="btn pri" data-act="impdo">${prevMode?'Trazer parcelas':'Aplicar conferência'}</button></span></div>
+    ${!prevMode&&I.adiantado?`<div class="hint small grid" style="gap:6px"><span>Ao aplicar, entra no cartão a linha <b>"Pago antes do fechamento" −${brl(I.adiantado)}</b>. Assim o cartão fica igual ao que a fatura cobra: <b>${brl(totPdf)}</b>.</span>
+      <label class="check"><input type="checkbox" id="impAdiant" ${I.lancAdiant!==false?'checked':''}> Registrar os ${brl(I.adiantado)} como saída em ${esc(mLabel(I.mesAdiant))}, quando você pagou (deixa o saldo daquele mês certo)</label></div>`:''}
+    <div class="revbar"><span class="num small">Depois de aplicar, o cartão fica com <b>${brl(r2(totDepois+(!prevMode&&falta>0.009&&I.lancFalta!==false?falta:0)-(!prevMode?I.adiantado||0:0)))}</b>${base!=null?` · fatura ${brl(I.adiantado?totPdf:base)}`:''}</span><span style="margin-left:auto" class="btnrow"><button class="btn" data-act="impreset">Cancelar</button><button class="btn pri" data-act="impdo">${prevMode?'Trazer parcelas':'Aplicar conferência'}</button></span></div>
   </section>`;
 }
 
@@ -1672,7 +1683,7 @@ function conciliar(rows,card,M){
   const ok=[],dif=[],novo=[],pag=[];
   const fat=rows.filter(r=>{ if(r.tipo==='pagamento'){ pag.push(r); return false } return true; });
   const pairs=[];
-  fat.forEach((r,ri)=>prev.forEach((e,ei)=>{ if(e.origem==='total') return;
+  fat.forEach((r,ri)=>prev.forEach((e,ei)=>{ if(e.origem==='total'||e.origem==='adiantado') return;
     const s=simDesc(r.desc,e.desc); const veq=Math.abs((+e.valor)-r.valor)<0.011;
     const parcOk=!(r.n&&+e.nTotal>1&&e.origem!=='planilha')||(r.k===e.k&&r.n===+e.nTotal);
     let score=0;
@@ -1689,7 +1700,7 @@ function conciliar(rows,card,M){
     if(p.veq) ok.push({r,e,nome:p.s<.4}); else dif.push({r,e,usar:true});
   }
   fat.forEach((r,ri)=>{ if(!rUsed.has(ri)) novo.push(r); });
-  const falt=prev.filter((e,i)=>!usado.has(i)).map(e=>({e,acao:e.origem==='total'?'apagar':'manter'}));
+  const falt=prev.filter((e,i)=>!usado.has(i)).map(e=>({e,acao:e.origem==='total'||e.origem==='adiantado'?'apagar':'manter'}));
   return {prev,ok,dif,novo,falt,pag};
 }
 function toReview(rows,how){
@@ -1732,14 +1743,17 @@ async function doImport(){
     const criados=[];
     for(const r of R.novo.filter(r=>r.on)){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:r.desc,valor:r.valor,mesRef:M,parcRef:r.k&&r.n?r.k:1,nTotal:r.k&&r.n?r.n:1,quem:r.quem||'',grupo:'',cat:r.cat!==(autoCat(r.desc)||'Outros')?r.cat:'',data:r.data||'',origem:I.how==='claude'?'claude':'pdf',tipo:r.tipo,conferido:pm?{}:{[M]:true},suspeita:!!r.suspeita,fixo:r.fixo==='-'||S.lanc.some(l=>l.id===r.fixo)?r.fixo:''}]); }
     if(!pm&&(I.compras!=null||I.total!=null)&&I.falta>0.009&&I.lancFalta!==false){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:r2(I.falta),mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}]); }
+    const lancs=[];
+    if(!pm&&I.adiantado>0.005){ const fica=r2((I.totDepois||0)+(I.falta>0.009&&I.lancFalta!==false?I.falta:0)-I.total), vAd=Math.abs(fica-I.adiantado)<0.1?fica:r2(I.adiantado); const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Pago antes do fechamento da fatura',valor:-vAd,mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Pagamento adiantado',data:'',origem:'adiantado',tipo:'pagamento',conferido:{[M]:true},suspeita:false,fixo:'-'}]);
+      if(I.lancAdiant!==false){ const lid=uid('l'); lancs.push(lid); await put('lanc',lid,{tipo:'despesa',desc:'Fatura '+cardName(card)+' paga antes do fechamento ('+mShort(M)+')',valor:r2(I.adiantado),grupo:'',cat:'Pagamento adiantado',cartao:'',forma:'',dia:0,recorrente:false,mes:I.mesAdiant||addM(M,-1),fim:null,ajustes:{},origem:'adiantado'}); } }
     if(puts.length) await putMany('compras',puts);
     if(dels.length) await delMany('compras',dels);
     const after=sum(comprasDoMes(M,card),x=>x.valor);
     const pend=R.falt.filter(f=>f.acao==='manter').length+R.dif.filter(m=>!m.usar).length+R.novo.filter(r=>r.suspeita).length;
     const resumo=[R.ok.length+' bateram',R.dif.length?R.dif.length+' com valor diferente':'',R.novo.length?R.novo.length+' não lançados':'',R.falt.length?R.falt.length+' lançados que não vieram':'',R.novo.filter(r=>r.suspeita).length?R.novo.filter(r=>r.suspeita).length+' não reconhecidas':''].filter(Boolean).join(' · ');
-    const desfazer={criados,antes:antes.slice(0,400)};
+    const desfazer={criados,antes:antes.slice(0,400),lancs};
     if(pm) await put('conferencias','prev_'+card+'_'+M,{card,mes:M,em:new Date().toISOString(),previsao:true,pendencias:0,resumo:criados.length+' parcelas trazidas',desfazer});
-    else await put('conferencias',card+'_'+M,{card,mes:M,em:new Date().toISOString(),totalPdf:I.compras!=null?I.compras:I.total,aPagar:I.total,adiantado:I.adiantado||0,totalApp:r2(after),diferenca:I.total!=null?r2(after-I.total):0,pendencias:pend,resumo,desfazer});
+    else await put('conferencias',card+'_'+M,{card,mes:M,em:new Date().toISOString(),totalPdf:I.adiantado>0.005?I.total:(I.compras!=null?I.compras:I.total),aPagar:I.total,adiantado:0,pagoAntes:I.adiantado||0,totalApp:r2(after),diferenca:I.total!=null?r2(after-I.total):0,pendencias:pend,resumo,desfazer});
     S.mes=pm?ymNow():M; S.card=card; S.imp={stage:'done',card,mes:pm?ymNow():M,resumo:pm?criados.length+' parcelas que continuam foram trazidas para os próximos meses.':resumo}; S._top=true; render(); toast(pm?'Parcelas trazidas':'Conferência aplicada');
   }catch(e){ I.stage='review'; render(); toast('Não consegui salvar: '+(e.code||e.message||'erro')); }
 }
@@ -2127,7 +2141,7 @@ document.addEventListener('click',async e=>{
     case 'undoask': S.undoAsk=t.dataset.k; render(); break;
     case 'undono': S.undoAsk=null; render(); break;
     case 'undodo': { const key=t.dataset.k; const cf=S.conf[key]; S.undoAsk=null; if(!cf?.desfazer) break;
-      await delMany('compras',cf.desfazer.criados||[]); if((cf.desfazer.antes||[]).length) await putMany('compras',cf.desfazer.antes.map(a=>[a.id,a.o])); await del('conferencias',key); toast('Conferência desfeita'); break; }
+      await delMany('compras',cf.desfazer.criados||[]); if((cf.desfazer.lancs||[]).length) await delMany('lanc',cf.desfazer.lancs); if((cf.desfazer.antes||[]).length) await putMany('compras',cf.desfazer.antes.map(a=>[a.id,a.o])); await del('conferencias',key); toast('Conferência desfeita'); break; }
     case 'repscope': S.repAll=t.dataset.v==='todos'; render(); break;
     case 'clearquem': S.quemFilter=null; render(); break;
     case 'impcard': S.impCard=t.dataset.id; break;
@@ -2304,6 +2318,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.cfgb&&S.draftCfg){ const p=t.dataset.cfgb.split('.'); let o=S.draftCfg; for(let i=0;i<p.length-1;i++) o=o[p[i]]; o[p[p.length-1]]=t.checked; markDirty(); return; }
   if(t.id==='impFile') handleFile(t.files[0]);
   if(t.id==='impFalta'&&S.imp){ S.imp.lancFalta=t.checked; render(); return; }
+  if(t.id==='impAdiant'&&S.imp){ S.imp.lancAdiant=t.checked; render(); return; }
   if(t.id==='impCard'&&S.imp){ S.imp.card=t.value; reconc(); render(); }
   if(t.id==='impMes'&&S.imp&&t.value){ S.imp.mes=t.value; reconc(); render(); }
   if(t.id==='destSel'){ const b=$('#destNovo'); if(b) b.hidden=t.value!=='__novo'; return; }
