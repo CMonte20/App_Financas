@@ -306,6 +306,13 @@ button.kpi{background:none;border:0;text-align:left;padding:0;cursor:pointer;col
 .atras{border:1px solid var(--out-soft);background:color-mix(in srgb,var(--out-soft) 45%,transparent);border-radius:12px;padding:8px 10px;margin-bottom:8px}
 
 .updbar{position:fixed;left:50%;transform:translateX(-50%);top:calc(12px + env(safe-area-inset-top,0px));z-index:40;background:var(--ink);color:var(--bg);border-radius:14px;padding:10px 12px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:calc(100% - 32px)}
+
+/* ===== v3.4: atalhos de entrada, campos em R$ ===== */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+button.chip{border:1px solid var(--line);cursor:pointer;min-height:34px;padding:6px 12px;font:inherit;font-size:.85rem}
+button.chip:active{background:var(--accent-soft)}
+input[data-money]{font-variant-numeric:tabular-nums}
+#metaInfo .btn{margin-left:4px}
 </style>
 
 <header class="top">
@@ -332,7 +339,7 @@ button.kpi{background:none;border:0;text-align:left;padding:0;cursor:pointer;col
 /* ===================== PARSER (puro, testável) ===================== */
 const MES_ABR={jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
 function parseBRL(s){ if(s==null) return NaN; s=String(s).replace(/R\$|\s/g,''); let neg=/^-|-$/.test(s); s=s.replace(/^-|-$/g,'');
-  if(/,\d{1,2}$/.test(s)) s=s.replace(/\./g,'').replace(',','.'); else s=s.replace(/,/g,''); const v=parseFloat(s); return neg?-v:v; }
+  if(/,\d{1,2}$/.test(s)) s=s.replace(/\./g,'').replace(',','.'); else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,''); else s=s.replace(/,/g,''); const v=parseFloat(s); return neg?-v:v; }
 function normDesc(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/parcela.*$/,'').replace(/[^a-z0-9]+/g,' ').trim()}
 function splitParcela(desc){
   let d=desc, k=null, n=null, m;
@@ -437,6 +444,19 @@ function loadScript(src){return new Promise((res,rej)=>{if(document.querySelecto
 const EU='Eu';
 const quemLabel=q=>q||EU;
 const num=v=>{const n=parseBRL(v);return isNaN(n)?0:n};
+// Máscara de dinheiro: a pessoa só digita os números (como no app do banco) e o app põe o "R$", o ponto e a vírgula
+const fmtMoney=v=>'R$ '+Math.abs(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+function maskMoney(t,e){
+  const um=e&&((e.inputType==='insertText'&&e.data&&e.data.length===1)||/^delete/.test(e.inputType||''));
+  if(!um&&e&&e.data&&e.data.length>1&&t.value!==e.data&&/^R\$/.test(t.value)) t.value=e.data; // texto inserido no fim de um valor já formatado: vale só o que entrou
+  if(um){ const d=t.value.replace(/\D/g,'').replace(/^0+/,'').slice(0,13); t.value=d?fmtMoney(+d/100):''; }
+  else { const raw=t.value.trim(); t.value=raw&&/\d/.test(raw)?fmtMoney(num(raw)):''; }
+  try{ const n=t.value.length; t.setSelectionRange(n,n); }catch(err){}
+}
+function fmtMoneyFields(root){ (root||document).querySelectorAll('input[data-money]').forEach(i=>{ if(i.dataset.fm) return; i.dataset.fm='1'; if(i.value!==''&&!/^R\$/.test(i.value)) i.value=fmtMoney(num(i.value)); }); }
+new MutationObserver(()=>fmtMoneyFields()).observe(document.documentElement,{childList:true,subtree:true});
+document.addEventListener('focusin',e=>{ const t=e.target; if(t.matches?.('input[data-money]')) setTimeout(()=>{ try{ if(document.activeElement===t&&t.selectionStart===t.selectionEnd){ const n=t.value.length; t.setSelectionRange(n,n); } }catch(err){} },0); });
+document.addEventListener('paste',e=>{ const t=e.target; if(!t.matches?.('input[data-money]')) return; const txt=(e.clipboardData||window.clipboardData)?.getData('text')||''; e.preventDefault(); t.value=/\d/.test(txt)?fmtMoney(num(txt)):t.value; t.dispatchEvent(new Event('input',{bubbles:true})); });
 
 /* ===================== categorias ===================== */
 // [nome, grupo do plano, dá para cortar?, palavras-chave separadas por |] — a ordem importa
@@ -507,7 +527,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.3';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.4';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],['patrimonio','Patrimônio','<path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -777,16 +797,16 @@ function sheetAtivo(id,classe){
     <div class="frow"><label class="f">Tipo<input class="i" name="tipo" list="dlTipo" value="${esc(d.tipo)}" placeholder="Escolha ou digite" required></label><label class="f">${isInv?'Instituição ou corretora (só o nome)':'Banco ou credor (só o nome)'}<input class="i" name="inst" list="dlInst" value="${esc(d.inst)}" placeholder="Escolha ou digite"></label></div>
     <p class="small muted" style="margin:0">🔒 ${AVISO_NOMES}</p>
     <label class="f">Nome (para você reconhecer)<input class="i" name="nome" value="${esc(d.nome)}" placeholder="${isInv?'Ex.: CDB 110% CDI Inter':isDiv?'Ex.: Financiamento do apartamento':'Ex.: Apartamento'}"></label>
-    ${isInv?`<div class="frow"><label class="f">Valor aplicado (total que você colocou)<input class="i num" name="aplicado" value="${esc(String(d.aplicado).replace('.',','))}" inputmode="decimal"></label><label class="f">Valor atual<input class="i num" name="atual" value="${esc(String(d.atual).replace('.',','))}" inputmode="decimal" required></label></div>
+    ${isInv?`<div class="frow"><label class="f">Valor aplicado (total que você colocou)<input class="i num" name="aplicado" value="${esc(String(d.aplicado).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00"></label><label class="f">Valor atual<input class="i num" name="atual" value="${esc(String(d.atual).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" required></label></div>
       <div class="frow"><label class="f">Quantidade (ações, cotas, títulos)<input class="i num" name="qtd" value="${esc(String(d.qtd??'').replace('.',','))}" inputmode="decimal" placeholder="opcional"></label><label class="f">Rentabilidade<input class="i" name="taxa" value="${esc(d.taxa)}" placeholder="Ex.: 100% do CDI"></label></div>
       <div class="frow"><label class="f">Vencimento<input class="i" type="date" name="venc" value="${esc(d.venc)}"></label><label class="f">Liquidez (quando dá para sacar)<input class="i" name="liquidez" list="dlLiq" value="${esc(d.liquidez)}"></label></div>
       <label class="f">Objetivo<input class="i" name="objetivo" list="dlObj" value="${esc(d.objetivo)}" placeholder="Ex.: Reserva de emergência"></label>`
-    :`<div class="frow"><label class="f">${isDiv?'Saldo devedor hoje (se não souber, deixe em branco)':'Valor estimado hoje'}<input class="i num" name="atual" value="${esc(d.estimar?'':String(d.atual).replace('.',','))}" inputmode="decimal" ${isDiv?'':'required'}></label>${isDiv?`<label class="f">Parcela mensal<input class="i num" name="parcela" value="${esc(String(d.parcela||'').replace('.',','))}" inputmode="decimal"></label>`:''}</div>
+    :`<div class="frow"><label class="f">${isDiv?'Saldo devedor hoje (se não souber, deixe em branco)':'Valor estimado hoje'}<input class="i num" name="atual" value="${esc(d.estimar?'':String(d.atual).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" ${isDiv?'':'required'}></label>${isDiv?`<label class="f">Parcela mensal<input class="i num" name="parcela" value="${esc(String(d.parcela||'').replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00"></label>`:''}</div>
       ${isDiv?`<div class="frow"><label class="f">Parcelas que faltam (contando a deste mês)<input class="i num" name="nParc" value="${esc(a&&a.refMes?Math.max(0,(+a.nParc||0)-diffM(a.refMes,ymNow())):'')}" inputmode="numeric"></label><label class="f">Dia do vencimento<input class="i num" name="dia" value="${esc(d.dia||'')}" inputmode="numeric"></label></div>
       <div class="frow"><label class="f">Como paga<select class="i" name="forma"><option value="">Não informado</option>${Object.entries(FORMAS).map(([k,l])=>`<option value="${k}" ${d.forma===k?'selected':''}>${l}</option>`).join('')}</select></label><label class="f">Juros<input class="i" name="taxa" value="${esc(d.taxa)}" placeholder="Ex.: 9,5% ao ano"></label></div>
       <p class="small muted" style="margin:0">A parcela entra sozinha nas contas de cada mês até acabar.</p>`:''}`}
     <button class="btn pri big" type="submit">Salvar</button>
-  </form>${a&&isDiv?`<div class="grid" style="gap:8px"><div class="eyebrow">Pagou um valor extra para abater a dívida?</div><div class="frow"><label class="f">Valor da amortização<input class="i num" id="amortV" inputmode="decimal"></label><div style="align-self:end"><button class="btn" data-act="amortizar">Registrar amortização</button></div></div></div>`:''}
+  </form>${a&&isDiv?`<div class="grid" style="gap:8px"><div class="eyebrow">Pagou um valor extra para abater a dívida?</div><div class="frow"><label class="f">Valor da amortização<input class="i num" id="amortV" inputmode="numeric" data-money placeholder="R$ 0,00"></label><div style="align-self:end"><button class="btn" data-act="amortizar">Registrar amortização</button></div></div></div>`:''}
   ${a?`<button class="btn danger" data-act="ativodelask">Apagar</button><div id="delConfirm"></div>`:''}
   ${dl('dlTipo',TIPOS[classe])}${dl('dlInst',INSTS)}${dl('dlObj',OBJS)}${dl('dlLiq',LIQ)}`);
 }
@@ -797,7 +817,7 @@ function sheetMov(){
   <form id="fMov" class="grid">
     <div class="seg" role="radiogroup"><label class="check" style="flex:1;justify-content:center"><input type="radio" name="tipo" value="aporte" checked> Aporte (guardei)</label><label class="check" style="flex:1;justify-content:center"><input type="radio" name="tipo" value="resgate"> Resgate (tirei)</label></div>
     <label class="f">Investimento<select class="i" name="ativo">${inv.map(a=>`<option value="${esc(a.id)}">${esc(a.nome||a.tipo)}${a.inst?' · '+esc(a.inst):''}</option>`).join('')}</select></label>
-    <label class="f">Valor<input class="i num" name="valor" inputmode="decimal" required></label>
+    <label class="f">Valor<input class="i num" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>
     <label class="f">Mês<input class="i" type="month" name="mes" value="${esc(ymNow())}" style="max-width:200px"></label>
     <p class="small muted" style="margin:0">Aparece no mês como "Investido", separado dos gastos, e conta para a meta do seu plano.</p>
     <button class="btn pri big" type="submit">Salvar</button></form>`);
@@ -806,7 +826,7 @@ function sheetSaldos(){
   S.sheetCtx={kind:'saldos'};
   openSheet(`<div class="sh"><h2>Atualizar saldos</h2><button class="x" data-act="closesheet" aria-label="Fechar">✕</button></div>
   <p class="small muted" style="margin:0">Digite o valor que aparece hoje no app de cada banco. O que você não mudar continua igual.</p>
-  <form id="fSaldos" class="grid">${S.ativos.map(a=>`<label class="f">${esc(a.nome||a.tipo)}${a.inst?' · '+esc(a.inst):''}${a.classe==='divida'?' (saldo devedor)':''}<input class="i num" name="${esc(a.id)}" value="${esc(String(a.atual).replace('.',','))}" inputmode="decimal"></label>`).join('')}
+  <form id="fSaldos" class="grid">${S.ativos.map(a=>`<label class="f">${esc(a.nome||a.tipo)}${a.inst?' · '+esc(a.inst):''}${a.classe==='divida'?' (saldo devedor)':''}<input class="i num" name="${esc(a.id)}" value="${esc(String(a.atual).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00"></label>`).join('')}
   <button class="btn pri big" type="submit">Salvar saldos</button></form>`);
 }
 
@@ -843,6 +863,7 @@ function vencCard(M){
 /* ---------- pontos de atenção ---------- */
 function alertas(M){
   const out=[], P=plano(M), c=P.g.c, base=P.base;
+  { const t=metaTotal(cfg()); if(Math.abs(t-100)>=0.05) out.push({n:'warn',t:`Seu plano soma ${String(t).replace('.',',')}%, e não 100%`,d:'Ajuste em Ajustes → Seu plano para os limites fazerem sentido.'}); }
   if(!base) out.push({n:'warn',t:'Nenhuma entrada lançada neste mês',d:'Cadastre o salário em Ajustes → Salário e contas fixas. O plano usa as entradas como base.'});
   if(c.saldo<0) out.push({n:'bad',t:`O mês fecha negativo: ${brl(c.saldo)}`,d:'As saídas estão maiores que as entradas.'});
   for(const x of P.gs){ if(x.poupanca||!x.lim) continue; const p=x.real/x.lim;
@@ -930,7 +951,7 @@ function sheetPagarAtrasada(pm,key){
   S.sheetCtx={kind:'atras',pm,key};
   openSheet(`<div class="sh"><h2>Pagar conta atrasada</h2><button class="x" data-act="closesheet" aria-label="Fechar">✕</button></div>
   <p style="margin:0"><b>${esc(v.nome)}</b> de ${esc(mLabel(pm))}: ${brl(v.valor)}</p>
-  <form id="fAtras" class="grid"><label class="f">Valor que você pagou (com juros e multa)<input class="i num" name="valor" value="${esc(String(v.valor).replace('.',','))}" inputmode="decimal" required></label>
+  <form id="fAtras" class="grid"><label class="f">Valor que você pagou (com juros e multa)<input class="i num" name="valor" value="${esc(String(v.valor).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>
   <label class="f">Mês em que pagou<input class="i" type="month" name="em" value="${esc(M)}" style="max-width:200px"></label>
   <p class="small muted" style="margin:0">O valor sai do mês em que você pagou. Os juros aparecem em "Juros e tarifas", para você ver quanto o atraso custou.</p>
   <button class="btn pri big" type="submit">Registrar pagamento</button></form>`);
@@ -946,7 +967,7 @@ function sheetDestinar(id){
       <label class="f">Nome (opcional)<input class="i" name="nome" placeholder="Ex.: Conta do Inter"></label>
     </div>
     <p class="small muted" style="margin:0">🔒 ${AVISO_NOMES}</p>
-    <label class="f">Valor<input class="i num" name="valor" value="${esc(String(Math.abs(r2(c.saldo))).replace('.',','))}" inputmode="decimal" required></label>
+    <label class="f">Valor<input class="i num" name="valor" value="${esc(String(Math.abs(r2(c.saldo))).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>
     <p class="small muted" style="margin:0">Fica registrado em ${esc(mLabel(M))} como ${pos?'dinheiro guardado':'dinheiro retirado'} e aparece no Patrimônio. Se dividiu em mais de um lugar, registre um de cada vez.</p>
     <button class="btn pri big" type="submit">Registrar</button></form>
   <datalist id="dlTipoD">${TIPOS.invest.map(x=>`<option value="${esc(x)}">`).join('')}</datalist><datalist id="dlInstD">${INSTS.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`);
@@ -1005,7 +1026,7 @@ function mesResumo(M){
   ${vencCard(M)}
   <section class="card"><div class="sechead"><h2>Pontos de atenção</h2><span class="small muted">${al.length?al.length+(al.length>1?' itens':' item'):''}</span></div>
     <div class="alerts">${(S.alAll?al:al.slice(0,3)).map(a=>`<button class="al ${a.n}" ${a.pat?'data-act="gopat"':a.cat?`data-act="opencat" data-cat="${esc(a.cat)}"`:a.card?`data-act="opencard" data-id="${esc(a.card)}"`:a.grupo?`data-act="opengrupo" data-g="${esc(a.grupo)}"`:''}><span class="ic" aria-hidden="true">${a.n==='bad'?'!':a.n==='warn'?'?':'i'}</span><b>${esc(a.t)}</b><span class="d">${esc(a.d)}</span></button>`).join('')||`<div class="al ok"><span class="ic">✓</span><b>Tudo dentro do plano</b><span class="d">Nenhum grupo acima do limite neste mês.</span></div>`}</div>${al.length>3?`<button class="btn ghost" data-act="alall">${S.alAll?'Mostrar menos':'Ver mais '+(al.length-3)}</button>`:''}</section>
-  <section class="card grid"><div class="sechead"><h2>Seu plano neste mês</h2><span class="small muted">base ${brl(P.base)}</span></div>
+  <section class="card grid"><div class="sechead"><h2>Seu plano neste mês</h2><span class="small muted">100% = ${brl(P.base)} de entradas</span></div>
     <div class="bud">${P.gs.filter(g=>g.meta||g.real).map(g=>{const over=!g.poupanca&&g.meta!=null&&g.real>g.lim+0.5;const under=g.poupanca&&g.real+0.5<g.lim;
       return `<div class="b"><span><b>${esc(g.nome)}</b> <span class="small muted">${g.meta!=null?g.meta+'% · '+(g.poupanca?'meta ':'limite ')+brl(g.lim):'sem meta no plano'}</span></span>
       <span class="num" style="font-weight:700;${over?'color:var(--out)':under?'color:var(--warn)':''}">${brl(g.real)}</span>
@@ -1217,7 +1238,7 @@ function viewConciliacao(){
     ${!I.mesAuto?'<div class="hint small">Não encontrei a data de vencimento no arquivo. Confira o mês da fatura acima antes de aplicar.</div>':''}
     <div class="btnrow" style="align-items:center">${totMsg}${I.how!=='claude'&&S.caps.sample&&I.text?`<button class="btn" data-act="claudeparse">Ler de novo com Claude</button>`:''}</div>
     <div class="minis">
-      <div class="mini"><div class="eyebrow">Previsto no app</div><div class="v">${brl(totPrev)}</div><div class="small muted">${R.prev.length} itens</div></div>
+      <div class="mini"><div class="eyebrow">Previsto no app</div><div class="v">${brl(totPrev)}</div><div class="small muted">${R.prev.length} ${R.prev.length===1?"item":"itens"}</div></div>
       <div class="mini"><div class="eyebrow">Na fatura</div><div class="v">${brl(totPdf!=null?totPdf:rowsLidos)}</div><div class="small muted">${I.rows.length} linhas</div></div>
       <div class="mini"><div class="eyebrow">Bateram</div><div class="v" style="color:var(--in)">${ok}</div></div>
       <div class="mini"><div class="eyebrow">Para revisar</div><div class="v" style="color:var(--warn)">${dif+novo+falt}</div></div>
@@ -1239,6 +1260,15 @@ function viewConciliacao(){
 }
 
 /* ---------- Ajustes ---------- */
+const pct1=x=>Math.round((+x||0)*10)/10;
+const metaTotal=C=>pct1(sum(C.grupos,g=>+g.meta||0));
+const grupoSobra=C=>C.grupos.find(g=>g.nome==='Margem extra')||C.grupos[C.grupos.length-1];
+function metaInfoHtml(C,aviso){
+  const t=metaTotal(C), f=pct1(100-t), fmt=x=>String(x).replace('.',',');
+  if(Math.abs(f)<0.05) return `<b style="color:var(--in)">Soma: 100% ✓</b>`;
+  if(f>0) return `<b style="color:var(--warn)">Soma: ${fmt(t)}% · faltam ${fmt(f)}%</b>${C.grupos.length?` <button class="btn ghost" style="padding:4px 8px" data-act="metafill">Pôr ${fmt(f)}% em ${esc(grupoSobra(C).nome)}</button>`:''}${aviso?`<br>${esc(aviso)}`:''}`;
+  return `<b style="color:var(--out)">Soma: ${fmt(t)}% · passou ${fmt(-f)}%</b> <span class="muted">diminua algum grupo</span>`;
+}
 function viewAjustes(){
   if(!S.draftDirty||!S.draftCfg) S.draftCfg=clone(cfg());
   const C=S.draftCfg, base=calc(S.mes).totEnt, p=prefs();
@@ -1249,18 +1279,18 @@ function viewAjustes(){
   const lb=p.lastBackup;
   return `<div class="grid">
   <details class="set" ${open('plano')} data-sec="plano"><summary>Seu plano <span class="small muted">quanto de cada entrada vai para cada grupo</span></summary><div class="body">
-    <p class="small muted" style="margin:0">Arraste a barra ou digite o percentual. É um guia, não uma trava: o app avisa quando um grupo passa do limite. Base de exemplo: entradas de ${esc(mLabel(S.mes))}, ${brl(base)}.</p>
+    <p class="small muted" style="margin:0"><b>100% é tudo o que entrou no mês</b>: salário e rendas extras, como férias, 13º e bônus. Divida esses 100% entre os grupos; a soma precisa fechar em 100%. No mês, o app avisa quando um gasto passa do limite do grupo. Exemplo com ${esc(mLabel(S.mes))}: 100% = ${brl(base)}.</p>
     <div>${C.grupos.map((g,i)=>`<div class="pl"><div class="plh"><input class="i" data-cfg="grupos.${i}.nome" value="${esc(g.nome)}" aria-label="Nome do grupo"><label class="check small"><input type="checkbox" data-cfgb="grupos.${i}.poupanca" ${g.poupanca?'checked':''}> é poupança</label><button class="btn danger" data-act="cfgdel" data-k="grupos" data-i="${i}" aria-label="Remover grupo ${esc(g.nome)}">×</button></div>
       <div class="plr"><input type="range" min="0" max="100" step="1" value="${esc(+g.meta||0)}" data-meta="${i}" aria-label="Percentual de ${esc(g.nome)}"><input class="i num pct" data-meta="${i}" value="${esc(+g.meta||0)}" inputmode="decimal" aria-label="Percentual de ${esc(g.nome)} digitado"><span class="rs" data-rs="${i}">${brl(base*(+g.meta||0)/100)}</span></div></div>`).join('')}</div>
-    <div class="btnrow" style="align-items:center"><button class="btn" data-act="cfgadd" data-k="grupos">+ Grupo</button><span class="small">Soma: <b id="metaSum" style="${Math.round(metaSum)!==100?'color:var(--warn)':'color:var(--in)'}">${metaSum}%</b> ${Math.round(metaSum)!==100?'(o ideal é 100%)':''}</span></div>
+    <div class="btnrow" style="align-items:center"><button class="btn" data-act="cfgadd" data-k="grupos">+ Grupo</button><span id="metaInfo" class="small" aria-live="polite">${metaInfoHtml(C)}</span></div>
     <p class="small muted" style="margin:0">"É poupança": investimento e amortização somam juntos. Num mês em que amortizar o financiamento, o plano considera a meta cumprida pela amortização.</p>
-    <label class="f">Quanto você já tem investido hoje (para o acumulado)<input class="i num" data-cfg="investInicial" value="${esc(C.investInicial||0)}" inputmode="decimal"></label>
+    <label class="f">Quanto você já tem investido hoje (para o acumulado)<input class="i num" data-cfg="investInicial" value="${esc(C.investInicial||0)}" inputmode="numeric" data-money placeholder="R$ 0,00"></label>
     <div class="eyebrow">Reserva de emergência</div>
-    <div class="frow"><label class="f">Quanto você já tem guardado na reserva hoje<input class="i num" data-cfg="reserva.atual" value="${esc(C.reserva?.atual||0)}" inputmode="decimal"></label>
+    <div class="frow"><label class="f">Quanto você já tem guardado na reserva hoje<input class="i num" data-cfg="reserva.atual" value="${esc(C.reserva?.atual||0)}" inputmode="numeric" data-money placeholder="R$ 0,00"></label>
     <label class="f">Meta: quantos meses de gastos guardar<input class="i num" data-cfg="reserva.meses" value="${esc(C.reserva?.meses||6)}" inputmode="numeric"></label></div>
     <p class="small muted" style="margin:0">Os aportes do mês entram pela categoria "Reserva de emergência". O comum é guardar de 3 a 12 meses de gastos.</p>
   </div></details>
-  <details class="set" ${open('fixos')} data-sec="fixos"><summary>Salário e contas fixas <span class="small muted">${rec.length} itens</span></summary><div class="body">
+  <details class="set" ${open('fixos')} data-sec="fixos"><summary>Salário e contas fixas <span class="small muted">${rec.length} ${rec.length===1?'item':'itens'}</span></summary><div class="body">
     <p class="small muted" style="margin:0">Aparecem automaticamente todo mês. Se em algum mês o valor for diferente, abra o mês e ajuste só ele.</p>
     <div class="btnrow"><button class="btn pri" data-act="novofixo" data-t="entrada">+ Entrada fixa (salário)</button><button class="btn" data-act="novofixo" data-t="despesa">+ Conta fixa</button></div>
     <div class="rows">${rec.map(l=>`<button class="row" data-act="editlanc" data-id="${esc(l.id)}"><span class="d">${esc(l.desc)}</span><span class="v" style="color:${l.tipo==='entrada'?'var(--in)':'var(--ink)'}">${l.tipo==='entrada'?'+':''}${brl(l.valor)}</span><span class="sub"><span class="chip">${l.tipo==='entrada'?'entrada':esc(l.grupo||'sem grupo')}</span>${l.cartao?`<span class="chip third">no cartão ${esc(cardName(l.cartao))}</span>`:''}<span>desde ${mShort(l.mes)}${l.fim?' até '+mShort(l.fim):''}</span></span></button>`).join('')||'<div class="empty">Nada cadastrado ainda.</div>'}</div>
@@ -1352,13 +1382,14 @@ function sheetNovo(tipo='despesa',rec=null){
   <form id="fNovo" class="grid">
     <label class="f">Descrição<input class="i" name="desc" required autocomplete="off" placeholder="${isC?'Ex.: Café':tipo==='entrada'?'Ex.: Salário':'Ex.: Escola dos filhos'}"></label>
     ${isC?`<div class="frow"><label class="f">Cartão<select class="i" name="cartao">${cfg().cartoes.map(c=>`<option value="${esc(c.id)}" ${c.id===S.card?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></label>
-      <label class="f">Valor (da parcela)<input class="i" name="valor" inputmode="decimal" required></label></div>
+      <label class="f">Valor (da parcela)<input class="i" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label></div>
       <div class="frow"><label class="f">Parcela neste mês<input class="i" name="k" value="1" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="1" inputmode="numeric"></label></div>
       <div class="frow"><label class="f">De quem é<input class="i" name="quem" list="dlPessoas" placeholder="${EU}"></label><label class="f">Categoria<select class="i" name="cat"><option value="">Automática</option>${catOpts('')}</select></label></div>
       <label class="check"><input type="checkbox" name="recc"> Cobrança todo mês (assinatura)</label>`
-    :`<div class="frow"><label class="f">Valor<input class="i" name="valor" inputmode="decimal" required></label>${tipo==='despesa'?`<label class="f">Grupo do plano<select class="i" name="grupo">${grpOptsReq('Fixo')}</select></label>`:''}</div>
+    :`${tipo==='entrada'?`<div class="chips" role="group" aria-label="Tipo de entrada">${[['Salário',1],['13º salário',0],['Férias',0],['Bônus ou PLR',0],['Renda extra',0]].map(([d,r])=>`<button type="button" class="chip" data-act="entpreset" data-d="${d}" data-r="${r}">${d}</button>`).join('')}</div><p class="small muted" style="margin:0">Férias, 13º e bônus entram só no mês em que chegam e fazem parte dos 100% do plano daquele mês.</p>`:''}
+      <div class="frow"><label class="f">Valor<input class="i" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>${tipo==='despesa'?`<label class="f">Grupo do plano<select class="i" name="grupo">${grpOptsReq('Fixo')}</select></label>`:''}</div>
       ${tipo==='despesa'?`<label class="f">Categoria<select class="i" name="cat"><option value="">Automática</option>${catOpts('')}</select></label>${cartaoFixoSel('','')}`:''}
-      <div class="frow"><label class="check"><input type="checkbox" name="rec" ${rec?'checked':''}> Repete todo mês</label><label class="f">Dia do vencimento (opcional)<input class="i num" name="dia" inputmode="numeric" placeholder="ex.: 10"></label></div>`}
+      <div class="frow"><label class="check"><input type="checkbox" name="rec" ${rec?'checked':''}> Repete todo mês</label><label class="f">${tipo==='entrada'?'Dia em que cai (opcional)':'Dia do vencimento (opcional)'}<input class="i num" name="dia" inputmode="numeric" placeholder="ex.: 10"></label></div>`}
     <p class="small muted" style="margin:0">Entra em ${esc(mLabel(S.mes))}${isC?' (mês da fatura)':''}.</p>
     <button class="btn pri big" type="submit">Salvar</button>
   </form>${dlPessoas()}`);
@@ -1369,7 +1400,7 @@ function sheetLanc(id){
   openSheet(`<div class="sh"><h2>${l.tipo==='entrada'?'Entrada':'Conta ou gasto'}</h2><button class="x" data-act="closesheet" aria-label="Fechar">✕</button></div>
   <form id="fLanc" class="grid">
     <label class="f">Descrição<input class="i" name="desc" value="${esc(l.desc)}"></label>
-    <div class="frow"><label class="f">Valor${l.recorrente?' em '+esc(mLabel(S.mes)):''}<input class="i" name="valor" value="${esc(String(v??l.valor).replace('.',','))}" inputmode="decimal"></label>
+    <div class="frow"><label class="f">Valor${l.recorrente?' em '+esc(mLabel(S.mes)):''}<input class="i" name="valor" value="${esc(String(v??l.valor).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00"></label>
     ${l.tipo==='despesa'?`<label class="f">Grupo do plano<select class="i" name="grupo">${grpOptsReq(l.grupo)}</select></label>`:''}</div>
     ${l.tipo==='despesa'?`<label class="f">Categoria<select class="i" name="cat"><option value="">Automática (${esc(catOf({...l,cat:''}))})</option>${catOpts(l.cat||'')}</select></label>${cartaoFixoSel(l.cartao||'',l.forma||'')}`:''}
     ${l.tipo==='despesa'?`<label class="f">Dia do vencimento (opcional)<input class="i num" name="dia" value="${esc(l.dia||'')}" inputmode="numeric" style="max-width:140px"></label>`:''}
@@ -1388,7 +1419,7 @@ function sheetCompra(id,kAt){
   <form id="fCompra" class="grid">
     <label class="f">Descrição<input class="i" name="desc" value="${esc(d.desc)}" required></label>
     <div class="frow"><label class="f">Cartão<select class="i" name="cartao">${cfg().cartoes.map(o=>`<option value="${esc(o.id)}" ${o.id===d.cartao?'selected':''}>${esc(o.nome)}</option>`).join('')}</select></label>
-    <label class="f">Valor (da parcela)<input class="i" name="valor" value="${esc(String(d.valor).replace('.',','))}" inputmode="decimal" required></label></div>
+    <label class="f">Valor (da parcela)<input class="i" name="valor" value="${esc(String(d.valor).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" required></label></div>
     ${d.recorrente?'':`<div class="frow"><label class="f">Parcela em ${esc(mShort(S.mes))}<input class="i" name="k" value="${esc(k)}" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="${esc(n)}" inputmode="numeric"></label></div>`}
     <div class="frow"><label class="f">De quem é<input class="i" name="quem" list="dlPessoas" value="${esc(d.quem)}" placeholder="${EU}"></label><label class="f">Categoria<select class="i" name="cat"><option value="">Automática (${esc(catOf({...d,cat:''}))})</option>${catOpts(d.cat||'')}</select></label></div>
     <label class="f">Grupo do plano<select class="i" name="grupo">${grpOpts(d.grupo)}</select></label>
@@ -1403,7 +1434,7 @@ function sheetCompra(id,kAt){
 function sheetCat(cat){
   const g=gastos(S.mes); const it=g.items.filter(i=>i.cat===cat).sort((a,b)=>b.valor-a.valor);
   openSheet(`<div class="sh"><h2>${esc(cat)}</h2><button class="x" data-act="closesheet" aria-label="Fechar">✕</button></div>
-  <p class="muted" style="margin:0">${mLabel(S.mes)} · ${brl(sum(it,i=>i.valor))} em ${it.length} itens</p>
+  <p class="muted" style="margin:0">${mLabel(S.mes)} · ${brl(sum(it,i=>i.valor))} em ${it.length} ${it.length===1?"item":"itens"}</p>
   <div class="rows">${it.map(i=>`<button class="row" data-act="${i.src==='lanc'?'editlanc':'editcompra'}" data-id="${esc(i.id)}"><span class="d">${esc(i.desc)}</span><span class="v">${brl(i.valor)}</span><span class="sub">${i.cartao?`<span class="chip">${esc(i.cartao)}</span>`:'<span class="chip">conta</span>'}${i.n>1?`<span class="chip">${i.k}/${i.n}</span>`:''}</span></button>`).join('')}</div>
   <p class="small muted" style="margin:0">Toque num item para mudar a categoria. O app aprende para as próximas compras do mesmo lugar.</p>`);
 }
@@ -2007,7 +2038,10 @@ document.addEventListener('click',async e=>{
     case 'cfgadd': { const C=S.draftCfg; const k=t.dataset.k; if(k==='cartoes') C.cartoes.push({id:uid('k'),nome:'Novo cartão'}); else if(k==='grupos') C.grupos.push({nome:'Novo grupo',meta:0}); else (C.pessoas=C.pessoas||[]).push(''); S.draftDirty=true; S.openSet=t.closest('details')?.dataset.sec; render(); break; }
     case 'cfgdel': S.draftCfg[t.dataset.k].splice(+t.dataset.i,1); S.draftDirty=true; S.openSet=t.closest('details')?.dataset.sec; render(); break;
     case 'cfgundo': S.draftCfg=null; S.draftDirty=false; render(); break;
-    case 'cfgsave': { const C=S.draftCfg;
+    case 'entpreset': { const f=$('#fNovo'); if(!f) return; f.desc.value=t.dataset.d; f.rec.checked=t.dataset.r==='1'; f.valor.focus(); break; }
+    case 'metafill': { const C=S.draftCfg; if(!C) return; const g=grupoSobra(C); g.meta=pct1((+g.meta||0)+100-metaTotal(C)); S.draftDirty=true; S.openSet='plano'; render(); toast(g.nome+' ficou com '+String(g.meta).replace('.',',')+'%'); break; }
+    case 'cfgsave': { const C=S.draftCfg; C.grupos.forEach(g=>{g.meta=pct1(Math.max(0,Math.min(100,num(g.meta))))});
+      if(Math.abs(metaTotal(C)-100)>=0.05){ S.openSet='plano'; render(); const t=metaTotal(C); toast(t<100?`O plano precisa fechar 100%. Faltam ${String(pct1(100-t)).replace('.',',')}% para distribuir.`:`O plano passou de 100% (${String(t).replace('.',',')}%). Diminua algum grupo.`); setTimeout(()=>$('#metaInfo')?.scrollIntoView({block:'center'}),60); return; }
       if(C.cartoes.some(k=>pareceDadoBancario(k.nome))||(C.pessoas||[]).some(pareceDadoBancario)){ toast('Parece um número de cartão ou de conta. Use só um apelido, como "Nubank da Nay".'); return; } C.pessoas=(C.pessoas||[]).map(s=>String(s).trim().slice(0,60)).filter(Boolean); C.grupos.forEach(g=>{g.meta=Math.max(0,Math.min(100,num(g.meta)));g.nome=String(g.nome).slice(0,60)}); C.diaPagamento=Math.max(1,Math.min(28,parseInt(C.diaPagamento)||10)); C.investInicial=num(C.investInicial); C.driveClientId=String(C.driveClientId||'').trim();
       if(C.driveClientId&&!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(C.driveClientId)){ toast('ID do Google inválido: precisa terminar em .apps.googleusercontent.com'); return; }
       C.cartoes.forEach(k=>{k.venc=Math.max(0,Math.min(31,parseInt(k.venc)||0))});
@@ -2106,6 +2140,7 @@ document.addEventListener('submit',async e=>{
   }catch(err){ toast('Não consegui salvar: '+(err.code||err.message||'erro')); }
 });
 document.addEventListener('input',e=>{
+  if(e.target.matches?.('input[data-money]')) maskMoney(e.target,e);
   const t=e.target;
   if(t.id==='newPw'){ const s=senhaForte(t.value); const m=$('#pwMeter'); if(m){ m.style.width=(s*25)+'%'; m.style.background=s<3?'var(--out)':s<4?'var(--warn)':'var(--in)'; } return; }
   if(t.dataset.nv!=null&&S.imp?.res){ const r=S.imp.res.novo[+t.dataset.nv]; const f=t.dataset.f;
@@ -2114,10 +2149,12 @@ document.addEventListener('input',e=>{
   if(t.dataset.df!=null&&S.imp?.res){ S.imp.res.dif[+t.dataset.df].usar=t.checked; render(); return; }
   if(t.dataset.ft!=null&&S.imp?.res){ S.imp.res.falt[+t.dataset.ft].acao=t.value; render(); return; }
   if(t.dataset.port!=null&&S.imp){ S.imp.portMap[t.dataset.port]=t.value; S.imp.res.novo.forEach(r=>{if(r.portador===t.dataset.port) r.quem=t.value}); render(); return; }
-  if(t.dataset.meta!=null&&S.draftCfg){ const i=+t.dataset.meta; let v=Math.max(0,Math.min(100,num(t.value))); S.draftCfg.grupos[i].meta=v;
-    document.querySelectorAll(`[data-meta="${i}"]`).forEach(x=>{ if(x!==t) x.value=v; });
+  if(t.dataset.meta!=null&&S.draftCfg){ const i=+t.dataset.meta; const G=S.draftCfg.grupos; const livre=pct1(100-sum(G.filter((g,j)=>j!==i),g=>+g.meta||0));
+    let v=Math.max(0,Math.min(100,num(t.value))), aviso=''; if(v>livre){ v=Math.max(0,livre); aviso=`${G[i].nome} pode ir até ${String(v).replace('.',',')}%: o resto já está nos outros grupos.`; if(t.type!=='range') t.value=String(v).replace('.',','); else t.value=v; }
+    v=pct1(v); G[i].meta=v;
+    document.querySelectorAll(`[data-meta="${i}"]`).forEach(x=>{ if(x!==t) x.value=x.type==='range'?v:String(v).replace('.',','); });
+    const mi=$('#metaInfo'); if(mi) mi.innerHTML=metaInfoHtml(S.draftCfg,aviso);
     const base=calc(S.mes).totEnt; const rs=$(`[data-rs="${i}"]`); if(rs) rs.textContent=brl(base*v/100);
-    const tot=sum(S.draftCfg.grupos,g=>+g.meta||0); const ms=$('#metaSum'); if(ms){ ms.textContent=tot+'%'; ms.style.color=Math.round(tot)!==100?'var(--warn)':'var(--in)'; }
     markDirty(); return; }
   if(t.dataset.cfg&&S.draftCfg){ const p=t.dataset.cfg.split('.'); let o=S.draftCfg; for(let i=0;i<p.length-1;i++) o=o[p[i]]; o[p[p.length-1]]=t.value; markDirty(); return; }
 });
