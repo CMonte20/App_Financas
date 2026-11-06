@@ -1,0 +1,7 @@
+# Nunca publique dados pessoais
+*.json
+!manifest.webmanifest
+*.pdf
+*.xlsx
+*.csv
+*.ofx
