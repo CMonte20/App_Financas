@@ -315,6 +315,32 @@ button.chip:active{background:var(--accent-soft)}
 input[data-money]{font-variant-numeric:tabular-nums}
 #metaInfo .btn{margin-left:4px}
 @media (max-width:440px){.top .wrap{flex-wrap:nowrap}.monthnav{min-width:0;flex:1 1 auto}.monthnav .label{min-width:0;flex:1;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.monthnav .today{padding:4px 6px;font-size:.72rem}.top .btn.ghost{min-width:34px;padding:5px}}
+
+/* ===== v3.8: layout sem sobreposição em telas pequenas e letra grande ===== */
+.row>*,.catrow>*,.cr>*,.plh>*,.plr>*,.frow>*,.minis>*,.kpis>*{min-width:0}
+.row .d{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.row .note{grid-column:1/-1;font-size:.78rem;color:var(--muted);line-height:1.35}
+.row .v{white-space:nowrap}
+.catrow>span:first-child{overflow-wrap:anywhere}
+.catrow .num{text-align:right;white-space:nowrap}
+.catrow .num .small{display:block;font-weight:500}
+.seg button{white-space:normal;line-height:1.2;min-width:0;overflow-wrap:anywhere}
+.cr .meta .i{max-width:100%}
+.hint,.err,.banner,.confirm{overflow-wrap:anywhere}
+.cardrow>span{min-width:0;overflow-wrap:anywhere}
+@media (max-width:420px){nav.tabs a{font-size:11px;padding-left:2px;padding-right:2px;min-width:0;overflow-wrap:anywhere}}
+@media (max-width:360px){.kpi .v{font-size:1.1rem}}
+.chip{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.cr>span{overflow-wrap:anywhere}
+@media (max-width:380px){.rows .cr[style*="40px"]{grid-template-columns:24px 30px minmax(0,1fr) auto!important;gap:4px 8px}}
+.t .chip{white-space:nowrap}
+@media (max-width:820px){nav.tabs{gap:0;padding-left:max(4px,env(safe-area-inset-left,0px));padding-right:max(4px,env(safe-area-inset-right,0px))}nav.tabs a{flex:1 1 0;min-width:0;text-align:center}}
+.grid>*,.card>*{min-width:0}
+.chart{max-width:100%;min-width:0}
+nav.tabs{box-sizing:border-box;max-width:100vw}
+nav.tabs a{box-sizing:border-box}
+html,body{overflow-x:clip}
+.swipehint{display:none}@media (max-width:640px){.swipehint{display:block}}
 </style>
 
 <header class="top">
@@ -358,14 +384,19 @@ function parseFaturaText(text){
   const AMT=String.raw`([-+]\s?)?(?:R\$\s*)?(-\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(\s?-|\s?[CD](?![\wÀ-ú]))?`;
   const re=new RegExp(`(?:^|\\s)${DATE}\\s+(.+?)\\s+${AMT}(?=\\s|$)`,'gi');
   const out=[];
-  for(const raw of String(text).split(/\r?\n/)){
+  // só as páginas com lançamentos: página sem nenhuma linha começando por data (resumo, parcelamento, encargos) é ignorada
+  const startRe=new RegExp(`^(?:\\d\\s+)?${DATE}\\s+\\S`,'i');
+  let pages=String(text).split('\f'); const comLanc=pages.filter(pg=>pg.split(/\r?\n/).some(l=>startRe.test(l.replace(/\s+/g,' ').trim())));
+  if(comLanc.length) pages=comLanc;
+  for(const raw of pages.join('\n').split(/\r?\n/)){
     const line=raw.replace(/(^|\s)[-–]\s{2,}(?=(?:R\$|\+|\d))/g,'$1 ').replace(/\b(?:USD|US\$|U\$\$?|EUR|€)\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/gi,' ').replace(/[−–](?=R\$|\d)/g,'-').replace(/\s+/g,' ').trim(); if(!line) continue;
     // encargo sem data (IOF, juros, anuidade) também entra, para a soma bater com o total
     if(!/\d{1,2}\/\d{1,2}|\d{1,2}\s+(?:de\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/i.test(line)&&!/%|^(total|saldo|limite|taxa|cet|valor|pagamento m)/i.test(line)){ const m=line.match(/^((?:repasse de )?iof[^0-9]*|juros[^0-9]*|anuidade[^0-9]*|tarifa[^0-9]*|multa[^0-9]*)\s(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})$/i); if(m){ const v=parseBRL(m[2]); if(v>0) out.push({data:'',desc:m[1].trim(),k:null,n:null,valor:v,tipo:'encargo'}); continue; } }
     re.lastIndex=0; let m;
     while((m=re.exec(line))){
       let [ , dt, desc, s1, s2, amt, suf] = m;
-      desc=desc.trim(); if(SKIP_RE.test(desc)||desc.length<2) continue;
+      desc=desc.trim().replace(/^[•*]{2,}\s*\d{4}\s*/,''); if(SKIP_RE.test(desc)||desc.length<2) continue;
+      if(/^a(?:t[eé])?\s+\d{1,2}(?:\/\d{1,2}|\s+(?:de\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez))/i.test(desc)) continue; // período: a 05 NOV
       if(/^\d+[.,]?\d*$/.test(desc)) continue;
       let v=parseBRL(amt); const neg=!!(s1||s2||(suf&&/[-C]/.test(suf)));
       const sp=splitParcela(desc);
@@ -390,10 +421,21 @@ function detectVencimento(text){
 }
 function detectTotal(text){
   const N=String.raw`(\d{1,3}(?:\.\d{3})*,\d{2})`;
-  const pats=[String.raw`saldo desta fatura`,String.raw`valor total desta fatura`,String.raw`total desta fatura`,String.raw`fatura atual`,String.raw`pagamento total`,String.raw`(?<!valor\s)total a pagar`,String.raw`valor (?:total )?da fatura(?!\s+anterior)`,String.raw`total da fatura(?!\s+anterior)`,String.raw`valor desta fatura`];
-  const lines=String(text).split(/\r?\n/);
-  for(const p of pats){ const re=new RegExp(p+String.raw`[^0-9\n]{0,25}(?:R\$\s*)?`+N,'i');
-    for(const l of lines){ if(/anterior|parcel|m[ií]nimo|limite|pr[oó]xim|simula/i.test(l)) continue; const m=l.match(re); if(m){ const v=parseBRL(m[1]); if(v>0) return v; } } }
+  const pats=[String.raw`saldo desta fatura`,String.raw`valor total desta fatura`,String.raw`valor total devido`,String.raw`total desta fatura`,String.raw`fatura atual`,String.raw`fatura (?:de [a-zç]+, )?no valor de`,String.raw`pagamento total`,String.raw`(?<!valor\s)total a pagar`,String.raw`valor (?:total )?da fatura(?!\s+anterior)`,String.raw`total da fatura(?!\s+anterior)`,String.raw`valor desta fatura`];
+  const T=String(text), lines=T.split(/\r?\n/), cand=[];
+  pats.forEach((p,pi)=>{ const re=new RegExp(p+String.raw`[^0-9\n]{0,25}(?:R\$\s*)?`+N,'i');
+    for(const l of lines){ if(/anterior|parcel|m[ií]nimo|limite|pr[oó]xim|simula|valor da transa/i.test(l)) continue; if((l.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g)||[]).length>1&&!/saldo desta|valor total desta/i.test(l)) continue; const m=l.match(re); if(m){ const v=parseBRL(m[1]); if(v>0) cand.push({v,pi,s:m[1]}); } } });
+  if(!cand.length) return null;
+  const vezes=x=>T.split(x).length-1; // o total costuma aparecer várias vezes na fatura; valores de simulação aparecem uma vez
+  cand.sort((a,b)=>(vezes(b.s)-vezes(a.s))||(a.pi-b.pi)); return cand[0].v;
+}
+// soma das compras do período, quando a fatura informa (serve para conferir quando houve pagamento adiantado)
+function detectCompras(text){
+  const N=String.raw`(\d{1,3}(?:\.\d{3})*,\d{2})`, T=String(text);
+  const pats=[String.raw`total de compras de todos os cart[oõ]es[^R\n]*`,String.raw`total despesas/d[eé]bitos no brasil`,String.raw`despesas at[eé] a emiss[aã]o desta fatura`,String.raw`total dos lan[cç]amentos atuais`];
+  for(const p of pats){ const m=T.match(new RegExp(p+String.raw`[^0-9\n]{0,10}(?:R\$\s*)?`+N,'i')); if(m){ let tot=parseBRL(m[1]);
+    if(/brasil/.test(p)){ const ex=T.match(new RegExp(String.raw`total despesas/d[eé]bitos no exterior[^0-9\n]{0,10}(?:R\$\s*)?`+N,'i')); if(ex) tot+=parseBRL(ex[1]); }
+    return Math.round(tot*100)/100; } }
   return null;
 }
 // sem data de vencimento no PDF: estima pelo mês da compra mais recente (fatura vence no mês seguinte)
@@ -548,7 +590,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.8';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.9';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],['patrimonio','Patrimônio','<path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -689,6 +731,7 @@ function calc(M){
   // Fatura do cartão: sempre um valor a pagar (nunca negativo). Crédito maior que as compras fica zerado e avisado.
   const cards=cfg().cartoes.map(c=>{const it=comprasDoMes(M,c.id);const bruto=r2(sum(it,x=>x.valor));const tot=Math.max(0,bruto);const terc=Math.max(0,r2(sum(it.filter(x=>x.quem),x=>x.valor)));
     return {...c,itens:it,total:tot,credito:bruto<0?-bruto:0,terc,nosso:r2(Math.max(0,tot-terc)),resta:Math.max(0,sum(it,x=>restante(x,M))),conf:S.conf[c.id+'_'+M]||null,abat:0,abatItens:[]}});
+  for(const k of cards){ k.adiantado=k.conf&&!k.conf.previsao?Math.min(k.total,+k.conf.adiantado||0):0; k.aPagar=r2(Math.max(0,k.total-k.adiantado)); }
   // Conta fixa paga no cartão (ex.: escola): o valor cadastrado é o real e entra em Contas fixas.
   // Quando a fatura daquele mês é conferida, a cobrança já está nela: o app abate o valor fixo do total do cartão para não contar duas vezes.
   // Conta fixa paga no cartão = ESTIMATIVA para controle. O cartão comanda:
@@ -876,7 +919,7 @@ function sheetSaldos(){
 /* ---------- calendário de vencimentos ---------- */
 function vencimentos(M){
   const c=calc(M), out=[], pg=S.pagos[M]||{}, now=ymNow(), hoje=new Date().getDate();
-  for(const k of c.cards) if(k.total>0) out.push({key:'c_'+k.id,dia:+k.venc||0,nome:'Fatura '+k.nome,valor:k.total,tipo:'cartao',forma:'Fatura'});
+  for(const k of c.cards) if(k.aPagar>0) out.push({key:'c_'+k.id,dia:+k.venc||0,nome:'Fatura '+k.nome,valor:k.aPagar,tipo:'cartao',forma:'Fatura'});
   for(const d of c.des) if(!d.cartao&&d.v>0) out.push({key:'l_'+d.id,dia:+d.dia||0,nome:d.desc,valor:d.v,tipo:'conta',forma:FORMAS[d.forma]||''});
   for(const v of out){ const p=pg[v.key]; v.pago=!!p; v.pagoEm=p&&typeof p==='object'?p:null;
     if(v.pago) v.st='pago'; else if(!v.dia) v.st=diffM(M,now)>0?'atrasado':'semdia'; else if(diffM(M,now)>0||(M===now&&v.dia<hoje)) v.st='atrasado'; else if(M===now&&v.dia-hoje<=3) v.st='breve'; else v.st='futuro';
@@ -943,7 +986,7 @@ function cortes(M){
 /* ===================== render ===================== */
 function renderTabs(){
   $('#tabs').innerHTML=TABS.filter(t=>NAV.includes(t[0])).map(([k,l,ic])=>`<a href="#${k}" ${S.tab===k?'aria-current="page"':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${l}</a>`).join('');
-  $('#mLabel').textContent=S.tab==='ano'?S.mes.slice(0,4):(window.innerWidth<440&&S.mes!==ymNow()?cap(mShort(S.mes)):cap(mLabel(S.mes))); $('#mLabel').title=mLabel(S.mes);
+  $('#mLabel').textContent=S.tab==='ano'?S.mes.slice(0,4):(window.innerWidth<440?cap(mShort(S.mes)):cap(mLabel(S.mes))); $('#mLabel').title=mLabel(S.mes);
   $('#mToday').hidden=S.mes===ymNow();
   $('#lockBtn').hidden=S.mode!=='local';
   const gb=$('#gearBtn'); if(gb){ if(S.tab==='ajustes') gb.setAttribute('aria-current','page'); else gb.removeAttribute('aria-current'); }
@@ -1032,7 +1075,7 @@ function rowLanc(l){
   const rec=l.recorrente?'<span class="chip">todo mês</span>':'<span class="chip">só este mês</span>';
   const aj=l.ajustes&&Object.prototype.hasOwnProperty.call(l.ajustes,S.mes)?`<span class="chip warn">ajustado · previsto ${brl(l.valor)}</span>`:'';
   const env=l.cartao&&l.cardNome?`<span class="chip third">estimativa · cartão ${esc(l.cardNome)}</span>${l.conferida?'<span class="chip ok">fatura conferida</span>':''}`:'';
-  const v2=l.cartao&&l.cardNome?`<span class="v2">${l.conferida?`estimativa de ${brl(l.estimado)} · o valor real foi contabilizado na fatura ${esc(l.cardNome)}`:l.lig>0?`estimativa ${brl(l.estimado)} · ${brl(l.lig)} já gastos no ${esc(l.cardNome)} · faltam ${brl(l.v)}`:`estimativa ${brl(l.estimado)} · nada gasto no ${esc(l.cardNome)} ainda`}</span>`:'';
+  const v2=l.cartao&&l.cardNome?`<span class="note">${l.conferida?`estimativa de ${brl(l.estimado)} · o valor real foi contabilizado na fatura ${esc(l.cardNome)}`:l.lig>0?`estimativa ${brl(l.estimado)} · ${brl(l.lig)} já gastos no ${esc(l.cardNome)} · faltam ${brl(l.v)}`:`estimativa ${brl(l.estimado)} · nada gasto no ${esc(l.cardNome)} ainda`}</span>`:'';
   if(l.virtual) return `<button class="row" data-act="ativoedit" data-id="${esc(l.ativoId)}"><span class="d">${esc(l.desc)}</span><span class="v">${brl(l.v)}</span><span class="sub"><span class="chip">financiamento</span><span class="chip">faltam ${esc(l.restam)}</span>${l.dia?`<span class="chip">dia ${esc(l.dia)}</span>`:''}${(S.pagos[S.mes]||{})['l_'+l.id]?'<span class="chip ok">paga ✓</span>':''}</span></button>`;
   return `<button class="row" data-act="editlanc" data-id="${esc(l.id)}"><span class="d">${esc(l.desc)}</span><span class="v">${brl(l.v)}</span><span class="sub">${rec}${aj}${env}${l.forma&&FORMAS[l.forma]?`<span class="chip">${FORMAS[l.forma]}</span>`:''}${l.dia?`<span class="chip">dia ${esc(l.dia)}</span>`:''}${(S.pagos[S.mes]||{})['l_'+l.id]?'<span class="chip ok">paga ✓</span>':''}${l.tipo==='despesa'?`<span class="chip">${esc(catOf(l))}</span>`:''}</span>${v2}</button>`;
 }
@@ -1102,7 +1145,7 @@ function mesLanc(M,c){
     </div><div class="grid">
       ${c.inv.length||c.movs.length?`<section class="card"><div class="sechead"><h2>Investido no mês</h2><span class="sum" style="color:var(--third)">${brl(c.totInv+c.totAmort)}</span></div><div class="rows">${c.movs.map(m=>`<button class="row" data-act="ativoedit" data-id="${esc(m.ativoId)}"><span class="d">${m.tipo==='aporte'?'Aporte':m.tipo==='resgate'?'Resgate':'Amortização'}: ${esc(m.nome)}</span><span class="v">${m.tipo==='resgate'?'−':''}${brl(m.valor)}</span></button>`).join('')}${c.inv.map(rowLanc).join('')}</div><p class="small muted" style="margin:6px 0 0">Não entra nos gastos. Fica somado no Patrimônio.</p></section>`:''}
       <section class="card"><div class="sechead"><h2>Faturas do mês</h2><span class="sum" style="color:var(--out)">${brl(c.totCard)}</span></div>
-        <div class="rows">${c.cards.map(k=>`<button class="cardrow" data-act="opencard" data-id="${esc(k.id)}"><span class="plastic" aria-hidden="true"></span><span style="min-width:0"><b>${esc(k.nome)}</b><div class="small muted">${k.itens.length} lançamento${k.itens.length===1?'':'s'}${k.terc?` · ${brl(k.terc)} de terceiros`:''}${k.fixResta?` · + ${brl(k.fixResta)} de estimativas a gastar`:''}</div>${confChip(k)}</span><span class="v">${brl(k.total)}</span></button>`).join('')}</div>
+        <div class="rows">${c.cards.map(k=>`<button class="cardrow" data-act="opencard" data-id="${esc(k.id)}"><span class="plastic" aria-hidden="true"></span><span style="min-width:0"><b>${esc(k.nome)}</b><div class="small muted">${k.itens.length} lançamento${k.itens.length===1?'':'s'}${k.terc?` · ${brl(k.terc)} de terceiros`:''}${k.fixResta?` · + ${brl(k.fixResta)} estimados`:''}</div>${confChip(k)}</span><span class="v">${brl(k.total)}</span></button>`).join('')}</div>
       </section>
       <section class="card"><div class="sechead"><h2>Próximos meses</h2><span class="small muted">faturas já previstas</span></div>${miniProj(M)}</section>
     </div></div>`;
@@ -1176,7 +1219,7 @@ function viewAno(){
   <section class="card grid"><div class="sechead"><h2>Mês a mês</h2><span class="small muted">barras claras são previsões</span></div>
     <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Entradas, saídas e investimento acumulado em ${Y}">${s}</svg></div>
     <div class="legend"><span><i style="background:var(--in)"></i>Entradas</span><span><i style="background:var(--out)"></i>Saídas</span><span><i style="background:var(--third)"></i>Investido acumulado (tracejado = previsão)</span></div>
-    <div class="tblwrap"><table class="t yr"><thead><tr><th>Mês</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Sobra</th><th style="text-align:right">Investido</th><th style="text-align:right">Amortizado</th><th>Plano</th></tr></thead>
+    <p class="small muted swipehint" style="margin:0">Arraste a tabela para o lado para ver todas as colunas →</p><div class="tblwrap"><table class="t yr"><thead><tr><th>Mês</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Sobra</th><th style="text-align:right">Investido</th><th style="text-align:right">Amortizado</th><th>Plano</th></tr></thead>
     <tbody>${rows.map(r=>{const okp=r.meta?r.poup+0.5>=r.meta:true;return `<tr class="${r.fut?'prev':''}"><td><button class="btn ghost" style="padding:0" data-act="gomes" data-m="${r.m}">${cap(MESES[+r.m.slice(5)-1])}</button>${r.fut?' <span class="chip">previsto</span>':''}${r.src==='planilha'?' <span class="chip">planilha</span>':''}</td><td class="v">${brl(r.e)}</td><td class="v">${brl(r.s)}</td><td class="v" style="${r.sobra<0?'color:var(--out)':''}">${brl(r.sobra)}</td><td class="v">${brl(r.inv)}</td><td class="v">${brl(r.am)}</td><td>${!r.e&&!r.s?'':okp?'<span class="ok-t">✓ ok</span>':'<span class="bad-t">abaixo</span>'}</td></tr>`}).join('')}</tbody></table></div>
   </section>
   <section class="card"><div class="sechead"><h2>Gastos do ano por categoria</h2><span class="small muted">média por mês</span></div>
@@ -1211,7 +1254,7 @@ function viewCartoes(){
     ${Object.entries(S.conf).filter(([key,c])=>c.previsao&&c.card===k.id&&c.desfazer&&(c.desfazer.criados||[]).length).map(([key,c])=>`<div class="btnrow small"><span class="muted" style="align-self:center">Parcelas trazidas da fatura de ${esc(mLabel(c.mes))}.</span><button class="btn ghost" data-act="undoask" data-k="${esc(key)}">Desfazer</button></div>${S.undoAsk===key?`<div class="confirm"><b>Apagar as ${c.desfazer.criados.length} parcelas trazidas da fatura de ${esc(mLabel(c.mes))}?</b><div class="btnrow"><button class="btn danger" data-act="undodo" data-k="${esc(key)}">Apagar</button><button class="btn" data-act="undono">Cancelar</button></div></div>`:''}`).join('')}
     ${S.undoAsk===k.id+'_'+M?`<div class="confirm"><b>Desfazer a conferência de ${esc(mLabel(M))}?</b><span class="small">Apaga as ${k.conf.desfazer.criados.length} compras que vieram do PDF e volta as compras alteradas como estavam.</span><div class="btnrow"><button class="btn danger" data-act="undodo" data-k="${esc(k.id+'_'+M)}">Desfazer</button><button class="btn" data-act="undono">Cancelar</button></div></div>`:''}
     <div class="minis">
-      <div class="mini"><div class="eyebrow">${k.conf&&!k.conf.previsao?'Fatura a pagar':'Fatura prevista'}</div><div class="v">${brl(k.total)}</div>${k.conf&&!k.conf.previsao?`<div class="small muted">${k.conf.totalPdf!=null?(Math.abs(k.conf.totalPdf-k.total)<0.05?'igual ao PDF ✓':'PDF: '+brl(k.conf.totalPdf)):'PDF sem total'}</div>`:''}</div>
+      <div class="mini"><div class="eyebrow">${k.conf&&!k.conf.previsao?'Fatura a pagar':'Fatura prevista'}</div><div class="v">${brl(k.aPagar)}</div>${k.conf&&!k.conf.previsao?`<div class="small muted">${k.adiantado?`compras ${brl(k.total)} · ${brl(k.adiantado)} já pagos antes`:k.conf.totalPdf!=null?(Math.abs(k.conf.totalPdf-k.total)<=0.05?'igual ao PDF ✓':'PDF: '+brl(k.conf.totalPdf)):'PDF sem total'}</div>`:''}</div>
       <div class="mini"><div class="eyebrow">Minha parte</div><div class="v">${brl(k.nosso)}</div></div>
       <div class="mini"><div class="eyebrow">Pagadores</div><div class="v" style="color:var(--third)">${brl(k.terc)}</div></div>
       <div class="mini"><div class="eyebrow">Saldo a pagar</div><div class="v">${brl(k.resta)}</div><div class="small muted">com parcelas futuras</div></div>
@@ -1270,11 +1313,15 @@ function viewConciliacao(){
   const totPdf=I.total, totPrev=sum(R.prev,x=>x.valor);
   const totDepois=r2(sum(R.ok,m=>m.r.valor)+sum(R.dif.filter(m=>m.usar),m=>m.r.valor)+sum(R.dif.filter(m=>!m.usar),m=>m.e.valor)+sum(R.novo.filter(r=>r.on),r=>r.valor)+sum(R.falt.filter(f=>f.acao==='manter'),f=>f.e.valor));
   const rowsLidos=r2(sum(I.rows.filter(r=>r.tipo!=='pagamento'),r=>r.valor));
-  const falta=totPdf!=null?r2(totPdf-totDepois):0; I.falta=falta;
+  const base=I.compras!=null?I.compras:totPdf; const adiant=I.compras!=null&&totPdf!=null?r2(I.compras-totPdf):0; I.adiantado=adiant>0.05?adiant:0;
+  let falta=base!=null?r2(base-totDepois):0; if(Math.abs(falta)<=0.05) falta=0; I.falta=falta;
   let totMsg='';
-  if(totPdf!=null){ const d=r2(totPdf-rowsLidos); totMsg=Math.abs(d)<0.05?`<div class="hint small" style="background:var(--accent-soft)">✓ As compras lidas somam exatamente o total da fatura: <b>${brl(totPdf)}</b>.</div>`
-    :d>0?`<div class="hint small">O total da fatura é <b>${brl(totPdf)}</b>, mas as compras que o app conseguiu ler somam <b>${brl(rowsLidos)}</b>. Faltaram <b>${brl(d)}</b>: pode ser saldo da fatura anterior, juros ou linhas que o app não entendeu.</div>`
-    :`<div class="hint small">O app leu <b>${brl(-d)}</b> a mais que o total da fatura (${brl(totPdf)}). Confira se há crédito ou estorno que não foi lido, ou uma linha repetida.</div>`; }
+  if(base!=null){ const d=r2(base-rowsLidos), rot=I.compras!=null?'o total de compras da fatura':'o total da fatura';
+    totMsg=Math.abs(d)<=0.05?`<div class="hint small" style="background:var(--accent-soft)">✓ As compras lidas somam ${rot}: <b>${brl(base)}</b>${Math.abs(d)>=0.005?` (diferença de ${brl(Math.abs(d))} de arredondamento do banco)`:''}.</div>`
+    :d>0?`<div class="hint small">${cap(rot)} é <b>${brl(base)}</b>, mas as compras que o app conseguiu ler somam <b>${brl(rowsLidos)}</b>. Faltaram <b>${brl(d)}</b>: pode ser juros ou linhas que o app não entendeu.</div>`
+    :`<div class="hint small">O app leu <b>${brl(-d)}</b> a mais que ${rot} (${brl(base)}). Confira se há crédito ou estorno que não foi lido, ou uma linha repetida.</div>`;
+    if(I.adiantado) totMsg+=`<div class="hint small">Você já pagou <b>${brl(I.adiantado)}</b> desta fatura antes de ela fechar. Compras do mês: ${brl(I.compras)} · falta pagar: <b>${brl(totPdf)}</b>.</div>`;
+    else if(I.compras!=null&&totPdf!=null&&totPdf-I.compras>0.05) totMsg+=`<div class="hint small">A fatura cobra ${brl(r2(totPdf-I.compras))} além das compras do mês (saldo da fatura anterior ou encargos).</div>`; }
   else totMsg=`<div class="hint small">Não achei o total impresso na fatura. Confira com o valor que o banco cobra: as compras lidas somam ${brl(rowsLidos)}.</div>`;
   const fixosCard=calc(I.mes).des.filter(d=>d.cartao===I.card&&d.cardNome).map(d=>({...d,v:d.estimado}));
   return `<section class="card grid">
@@ -1290,7 +1337,7 @@ function viewConciliacao(){
     ${!I.mesAuto?`<div class="hint small">${I.mesEstimado?`A fatura não traz a data de vencimento. Pelas datas das compras, deve ser a fatura de <b>${esc(mLabel(I.mes))}</b>. Confira o mês acima antes de aplicar.`:'Não encontrei a data de vencimento no arquivo. Confira o mês da fatura acima antes de aplicar.'}</div>`:''}
     ${totMsg}${I.how!=='claude'&&S.caps.sample&&I.text?`<div><button class="btn" data-act="claudeparse">Ler de novo com Claude</button></div>`:''}
     <div class="minis">
-      <div class="mini"><div class="eyebrow">Total da fatura</div><div class="v">${totPdf!=null?brl(totPdf):'—'}</div><div class="small muted">impresso no PDF</div></div>
+      <div class="mini"><div class="eyebrow">${I.compras!=null?'Compras na fatura':'Total da fatura'}</div><div class="v">${base!=null?brl(base):'—'}</div><div class="small muted">${I.adiantado?'a pagar '+brl(totPdf):'impresso no PDF'}</div></div>
       <div class="mini"><div class="eyebrow">Compras lidas</div><div class="v">${brl(rowsLidos)}</div><div class="small muted">${I.rows.filter(r=>r.tipo!=='pagamento').length} linhas</div></div>
       <div class="mini"><div class="eyebrow">Já previsto no app</div><div class="v">${brl(totPrev)}</div><div class="small muted">${R.prev.length} ${R.prev.length===1?"item":"itens"} (parcelas e compras lançadas)</div></div>
       <div class="mini"><div class="eyebrow">Bateram</div><div class="v" style="color:var(--in)">${ok}</div></div>
@@ -1303,14 +1350,14 @@ function viewConciliacao(){
       ${fixosDoCartao(I.card).length?`<select class="i" data-nv="${i}" data-f="fixo" aria-label="Faz parte de uma conta fixa?"><option value="" ${!r.fixo?'selected':''}>${(()=>{const f=fixosDoCartao(I.card).find(l=>catOf(l)===r.cat);return f?'Dentro do fixo: '+esc(f.desc)+' (auto)':'Fora das contas fixas'})()}</option>${fixosDoCartao(I.card).map(l=>`<option value="${esc(l.id)}" ${r.fixo===l.id?'selected':''}>Dentro do fixo: ${esc(l.desc)}</option>`).join('')}<option value="-" ${r.fixo==='-'?'selected':''}>Compra à parte</option></select>`:''}<label class="check small"><input type="checkbox" data-nv="${i}" data-f="suspeita" ${r.suspeita?'checked':''}> Não reconheço</label>${r.tipo!=='compra'?`<span class="chip">${esc(r.tipo)}</span>`:''}</div></div>`).join(''),novo)}
     ${sec('Valores diferentes','','warn',R.dif.map((m,i)=>`<div class="cr"><input type="checkbox" data-df="${i}" ${m.usar?'checked':''} aria-label="Usar valor da fatura para ${esc(m.e.desc)}"><span><b>${esc(m.e.desc)}</b> <span class="small muted">→ na fatura: ${esc(m.r.desc)}</span></span><span class="v">${brl(m.r.valor)}</span>
       <div class="meta">Previsto ${brl(m.e.valor)} · diferença ${brl(m.r.valor-m.e.valor)} · marque para corrigir com o valor da fatura${m.e.nTotal>1?' (vale para as próximas parcelas)':''}</div></div>`).join(''),dif)}
-    ${sec('Você lançou, mas não veio na fatura','','bad',`<p class="small muted" style="margin:4px 0">Pode ser compra em outro cartão, cobrança que vai para o mês seguinte, parcela paga adiantada ou compra cancelada.</p>`+R.falt.map((f,i)=>`<div class="cr"><span></span><span><b>${esc(f.e.desc)}</b> <span class="small muted">${f.e.nTotal>1?f.e.k+'/'+f.e.nTotal:f.e.recorrente?'todo mês':'à vista'}</span></span><span class="v">${brl(f.e.valor)}</span>
+    ${sec('Você lançou, mas não veio na fatura','','bad',`<p class="small muted" style="margin:4px 0">Pode ser compra em outro cartão, cobrança que vai para o mês seguinte, parcela paga adiantada ou compra cancelada.</p>`+R.falt.map((f,i)=>`<div class="cr"><span></span><span><b>${esc(f.e.desc)}</b> <span class="small muted">${f.e.origem==='total'?'lançado antes só com o total; será trocado pelas compras desta fatura':f.e.nTotal>1?f.e.k+'/'+f.e.nTotal:f.e.recorrente?'todo mês':'à vista'}</span></span><span class="v">${brl(f.e.valor)}</span>
       <div class="meta"><select class="i" data-ft="${i}" aria-label="O que fazer com ${esc(f.e.desc)}" style="max-width:240px">${[['manter','Manter como está'],['proximo','Passar para o mês seguinte'],['antecipada','Foi paga adiantada (mês anterior)'],['apagar',f.e.nTotal>1?'Apagar a compra toda':'Apagar']].filter(o=>o[0]!=='antecipada'||f.e.nTotal>1).map(([v,l])=>`<option value="${v}" ${f.acao===v?'selected':''}>${l}</option>`).join('')}</select></div></div>`).join(''),falt)}
     ${sec('Bateram','','ok',R.ok.map(m=>`<div class="cr"><span>✓</span><span>${esc(m.e.desc)}${m.nome?` <span class="small muted">(na fatura: ${esc(m.r.desc)})</span>`:''}</span><span class="v">${brl(m.r.valor)}</span></div>`).join(''),ok,true)}
     ${sec('Não entram nesta fatura','','',`<p class="small muted" style="margin:4px 0">Pagamento da fatura anterior: ele quita o mês passado, não é gasto deste mês.</p>`+R.pag.map(r=>`<div class="cr"><span></span><span>${esc(r.desc)}</span><span class="v">${brl(Math.abs(r.valor))}</span></div>`).join(''),R.pag.length,true)}
     ${fixosCard.length&&!prevMode?`<div class="hint small">${fixosCard.map(d=>`<b>${esc(d.desc)}</b> (${brl(d.v)})`).join(', ')} ${fixosCard.length>1?'são estimativas':'é uma estimativa'} de conta fixa paga com este cartão. Depois de aplicar, essa estimativa sai do mês e vale o que veio na fatura.</div>`:''}
     ${!I.rows.length?`<div class="err">Não encontrei lançamentos neste arquivo.${totPdf!=null?' Mas achei o total da fatura: você pode lançar só ele.':''}</div>`:''}
-    ${!prevMode&&totPdf!=null&&falta>0.009?`<label class="check"><input type="checkbox" id="impFalta" ${I.lancFalta!==false?'checked':''}> Lançar <b>${brl(falta)}</b> como "valor não detalhado" para o cartão ficar igual à fatura</label>`:''}
-    <div class="revbar"><span class="num small">Depois de aplicar, o cartão fica com <b>${brl(r2(totDepois+(!prevMode&&falta>0.009&&I.lancFalta!==false?falta:0)))}</b>${totPdf!=null?` · fatura ${brl(totPdf)}`:''}</span><span style="margin-left:auto" class="btnrow"><button class="btn" data-act="impreset">Cancelar</button><button class="btn pri" data-act="impdo">${prevMode?'Trazer parcelas':'Aplicar conferência'}</button></span></div>
+    ${!prevMode&&base!=null&&falta>0.009?`<label class="check"><input type="checkbox" id="impFalta" ${I.lancFalta!==false?'checked':''}> Lançar <b>${brl(falta)}</b> como "valor não detalhado" para o cartão ficar igual à fatura</label>`:''}
+    <div class="revbar"><span class="num small">Depois de aplicar, o cartão fica com <b>${brl(r2(totDepois+(!prevMode&&falta>0.009&&I.lancFalta!==false?falta:0)))}</b>${base!=null?` · fatura ${brl(base)}`:''}</span><span style="margin-left:auto" class="btnrow"><button class="btn" data-act="impreset">Cancelar</button><button class="btn pri" data-act="impdo">${prevMode?'Trazer parcelas':'Aplicar conferência'}</button></span></div>
   </section>`;
 }
 
@@ -1565,7 +1612,7 @@ async function pdfText(pdf){
       let r=rows.find(r=>Math.abs(r.y-y)<2.5); if(!r){r={y,items:[]};rows.push(r)} r.items.push({x,s:it.str,w:it.width||0}); }
     rows.sort((a,b)=>b.y-a.y);
     for(const r of rows){ r.items.sort((a,b)=>a.x-b.x); let s='',end=null; for(const it of r.items){ if(end!=null) s+=(it.x-end>30?'   ':(it.x-end>1.5?' ':'')); s+=it.s; end=it.x+it.w; } lines.push(s); }
-    lines.push('');
+    lines.push('\f');
   }
   return lines.join('\n');
 }
@@ -1625,7 +1672,7 @@ function conciliar(rows,card,M){
   const ok=[],dif=[],novo=[],pag=[];
   const fat=rows.filter(r=>{ if(r.tipo==='pagamento'){ pag.push(r); return false } return true; });
   const pairs=[];
-  fat.forEach((r,ri)=>prev.forEach((e,ei)=>{
+  fat.forEach((r,ri)=>prev.forEach((e,ei)=>{ if(e.origem==='total') return;
     const s=simDesc(r.desc,e.desc); const veq=Math.abs((+e.valor)-r.valor)<0.011;
     const parcOk=!(r.n&&+e.nTotal>1&&e.origem!=='planilha')||(r.k===e.k&&r.n===+e.nTotal);
     let score=0;
@@ -1642,7 +1689,7 @@ function conciliar(rows,card,M){
     if(p.veq) ok.push({r,e,nome:p.s<.4}); else dif.push({r,e,usar:true});
   }
   fat.forEach((r,ri)=>{ if(!rUsed.has(ri)) novo.push(r); });
-  const falt=prev.filter((e,i)=>!usado.has(i)).map(e=>({e,acao:'manter'}));
+  const falt=prev.filter((e,i)=>!usado.has(i)).map(e=>({e,acao:e.origem==='total'?'apagar':'manter'}));
   return {prev,ok,dif,novo,falt,pag};
 }
 function toReview(rows,how){
@@ -1651,7 +1698,7 @@ function toReview(rows,how){
   const tt=I.totalDetect!=null?I.totalDetect:detectTotal(I.text||'');
   const md=I.mesDetect||detectVencimento(I.text||'')||vencPertoDoTotal(I.text||'',tt); I.mesAuto=!!md; const est=md?null:vencPelasCompras(rows); I.mesEstimado=!!est;
   I.mes=md||est||I.mes||S.mes; I.passada=diffM(I.mes,ymNow())>0; I.modo=I.passada?(I.modo||'historico'):'historico';
-  I.total=I.totalDetect!=null?I.totalDetect:detectTotal(I.text||''); I.portMap=Object.assign({},cfg().portadores||{},I.portMap||{});
+  I.total=I.totalDetect!=null?I.totalDetect:detectTotal(I.text||''); I.compras=I.text?detectCompras(I.text):null; I.portMap=Object.assign({},cfg().portadores||{},I.portMap||{});
   I.rows=rows.map(r=>({...r}));
   reconc(); render();
 }
@@ -1684,7 +1731,7 @@ async function doImport(){
     for(const [id,u] of upd) puts.push([id,u]);
     const criados=[];
     for(const r of R.novo.filter(r=>r.on)){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:r.desc,valor:r.valor,mesRef:M,parcRef:r.k&&r.n?r.k:1,nTotal:r.k&&r.n?r.n:1,quem:r.quem||'',grupo:'',cat:r.cat!==(autoCat(r.desc)||'Outros')?r.cat:'',data:r.data||'',origem:I.how==='claude'?'claude':'pdf',tipo:r.tipo,conferido:pm?{}:{[M]:true},suspeita:!!r.suspeita,fixo:r.fixo==='-'||S.lanc.some(l=>l.id===r.fixo)?r.fixo:''}]); }
-    if(!pm&&I.total!=null&&I.falta>0.009&&I.lancFalta!==false){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:r2(I.falta),mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}]); }
+    if(!pm&&(I.compras!=null||I.total!=null)&&I.falta>0.009&&I.lancFalta!==false){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:r2(I.falta),mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}]); }
     if(puts.length) await putMany('compras',puts);
     if(dels.length) await delMany('compras',dels);
     const after=sum(comprasDoMes(M,card),x=>x.valor);
@@ -1692,7 +1739,7 @@ async function doImport(){
     const resumo=[R.ok.length+' bateram',R.dif.length?R.dif.length+' com valor diferente':'',R.novo.length?R.novo.length+' não lançados':'',R.falt.length?R.falt.length+' lançados que não vieram':'',R.novo.filter(r=>r.suspeita).length?R.novo.filter(r=>r.suspeita).length+' não reconhecidas':''].filter(Boolean).join(' · ');
     const desfazer={criados,antes:antes.slice(0,400)};
     if(pm) await put('conferencias','prev_'+card+'_'+M,{card,mes:M,em:new Date().toISOString(),previsao:true,pendencias:0,resumo:criados.length+' parcelas trazidas',desfazer});
-    else await put('conferencias',card+'_'+M,{card,mes:M,em:new Date().toISOString(),totalPdf:I.total,totalApp:r2(after),diferenca:I.total!=null?r2(after-I.total):0,pendencias:pend,resumo,desfazer});
+    else await put('conferencias',card+'_'+M,{card,mes:M,em:new Date().toISOString(),totalPdf:I.compras!=null?I.compras:I.total,aPagar:I.total,adiantado:I.adiantado||0,totalApp:r2(after),diferenca:I.total!=null?r2(after-I.total):0,pendencias:pend,resumo,desfazer});
     S.mes=pm?ymNow():M; S.card=card; S.imp={stage:'done',card,mes:pm?ymNow():M,resumo:pm?criados.length+' parcelas que continuam foram trazidas para os próximos meses.':resumo}; S._top=true; render(); toast(pm?'Parcelas trazidas':'Conferência aplicada');
   }catch(e){ I.stage='review'; render(); toast('Não consegui salvar: '+(e.code||e.message||'erro')); }
 }
