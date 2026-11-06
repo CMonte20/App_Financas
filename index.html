@@ -346,20 +346,22 @@ function normDesc(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''
 function splitParcela(desc){
   let d=desc, k=null, n=null, m;
   const pats=[/\s*[-–(]?\s*(?:parcela|parc\.?|prc)\s*(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})\s*\)?/i, /\s+[-–]?\s*(\d{1,2})\s*\/\s*(\d{1,2})\s*$/, /\s(\d{2})\s+DE\s+(\d{2})(?=\s|$)/];
-  for(const p of pats){ m=d.match(p); if(m){ const a=+m[1], b=+m[2]; if(a>=1&&b>=2&&a<=b&&b<=72){k=a;n=b;d=(d.slice(0,m.index)+d.slice(m.index+m[0].length)).trim();break;} } }
-  d=d.replace(/\s*[-–]\s*$/,'').replace(/\s{2,}/g,' ').trim();
+  for(const p of pats){ m=d.match(p); if(m){ const a=+m[1], b=+m[2]; if(a>=1&&b>=2&&a<=b&&b<=72){k=a;n=b;d=(d.slice(0,m.index)+' '+d.slice(m.index+m[0].length)).trim();break;} } }
+  d=d.replace(/\s*[-–]\s*$/,'').replace(/\s+BR$/,'').replace(/\s{2,}/g,' ').trim();
   return {desc:d,k,n};
 }
 const SKIP_RE=/^(total|saldo|subtotal|pagamento m[ií]nimo|valor m[ií]nimo|limite|resumo|fatura anterior|vencimento|melhor dia|taxa|cet|juros do (rotativo|parcelamento)\s*(m[aá]x|ao)|encargos m[aá]x)/i;
 const CREDIT_RE=/estorno|cr[eé]dito|devolu|reembolso|cashback|desconto|ajuste a cr/i;
-const PAY_RE=/pagamento|pagto|pgto (?:efetuado|recebido)|pag fatura|pagamento recebido/i;
+const PAY_RE=/pagamento|pagto|\bpgto\b|pag fatura|inclus[aã]o de pagamento/i;
 function parseFaturaText(text){
   const DATE=String.raw`(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\s+(?:de\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zç]*\.?(?:\s+(?:de\s+)?\d{4})?)`;
   const AMT=String.raw`([-+]\s?)?(?:R\$\s*)?(-\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(\s?-|\s?[CD](?![\wÀ-ú]))?`;
   const re=new RegExp(`(?:^|\\s)${DATE}\\s+(.+?)\\s+${AMT}(?=\\s|$)`,'gi');
   const out=[];
   for(const raw of String(text).split(/\r?\n/)){
-    const line=raw.replace(/(^|\s)[-–]\s{2,}(?=(?:R\$|\+|\d))/g,'$1 ').replace(/\s+/g,' ').trim(); if(!line) continue;
+    const line=raw.replace(/(^|\s)[-–]\s{2,}(?=(?:R\$|\+|\d))/g,'$1 ').replace(/\b(?:USD|US\$|U\$\$?|EUR|€)\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2}/gi,' ').replace(/[−–](?=R\$|\d)/g,'-').replace(/\s+/g,' ').trim(); if(!line) continue;
+    // encargo sem data (IOF, juros, anuidade) também entra, para a soma bater com o total
+    if(!/\d{1,2}\/\d{1,2}|\d{1,2}\s+(?:de\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/i.test(line)&&!/%|^(total|saldo|limite|taxa|cet|valor|pagamento m)/i.test(line)){ const m=line.match(/^((?:repasse de )?iof[^0-9]*|juros[^0-9]*|anuidade[^0-9]*|tarifa[^0-9]*|multa[^0-9]*)\s(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})$/i); if(m){ const v=parseBRL(m[2]); if(v>0) out.push({data:'',desc:m[1].trim(),k:null,n:null,valor:v,tipo:'encargo'}); continue; } }
     re.lastIndex=0; let m;
     while((m=re.exec(line))){
       let [ , dt, desc, s1, s2, amt, suf] = m;
@@ -546,7 +548,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.7';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.8';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],['patrimonio','Patrimônio','<path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -947,7 +949,7 @@ function renderTabs(){
   const gb=$('#gearBtn'); if(gb){ if(S.tab==='ajustes') gb.setAttribute('aria-current','page'); else gb.removeAttribute('aria-current'); }
   const mn=$('.monthnav'); if(mn) mn.hidden=['ajustes','patrimonio'].includes(S.tab);
 }
-function render(){
+function render(){ campoArquivo();
   if(document.body.classList.contains('locked')) return;
   renderTabs();
   const banners=[];
@@ -1241,9 +1243,8 @@ function viewImportar(){
       <div class="hint small"><b>Segurança:</b> prefira enviar só as páginas com a lista de compras, sem nome, CPF, endereço e número do cartão. No Android, abra o PDF, toque em Imprimir → Salvar como PDF e escolha só essas páginas. O app lê o arquivo na memória, apaga dados pessoais que encontrar, guarda apenas data, descrição e valor de cada compra e descarta o PDF.</div>
       <p class="small muted" style="margin:0">Começando agora? Importe as faturas que vencem neste mês, uma por cartão. Tudo entra como novo e as parcelas restantes (ex.: 3 de 4) já aparecem nos próximos meses.</p>
       <div class="drop" id="drop"><div class="big">Escolha o PDF da fatura</div>
-        <div class="muted small">Também aceita CSV ou OFX exportado do app do banco${S.caps.sample?', e print da fatura':''}</div>
+        <div class="muted small">Também aceita CSV ou OFX exportado do app do banco${S.caps.sample?', e print da fatura':''}</div>${window.__SITE?'<div class="muted small">No celular, você também pode abrir o PDF no WhatsApp, Gmail ou app do banco e tocar em <b>Compartilhar → Saldo Certo</b>.</div>':''}
         <div class="btnrow"><label class="btn pri big" for="impFile" style="width:auto">Escolher arquivo</label><button class="btn" data-act="pastetext">Colar texto</button><button class="btn" data-act="sototal">Só o total da fatura</button></div>
-        <input type="file" id="impFile" accept=".pdf,.csv,.ofx,.txt${S.caps.sample?',image/*':''}" hidden>
       </div>
       ${I&&I.err?`<div class="err">${esc(I.err)}</div>`:''}
       ${I&&I.paste?`<label class="f">Texto copiado do internet banking<textarea class="i" id="pasteBox" placeholder="Cole aqui as linhas da fatura"></textarea></label><div><button class="btn pri" data-act="parsepaste">Ler texto</button></div>`:''}
@@ -1254,7 +1255,6 @@ function viewImportar(){
   if(I.stage==='done') return `<section class="card grid done"><div class="okbig" aria-hidden="true">✓</div><h2>Conferência aplicada</h2>
     <p style="margin:0">${esc(cardName(I.card))} · fatura de ${esc(mLabel(I.mes))}</p><p class="small muted" style="margin:0">${esc(I.resumo)}</p>
     <div class="grid" style="gap:8px"><button class="btn pri big" data-act="gomes" data-m="${esc(I.mes)}">Ver o resumo do mês</button><button class="btn big" data-act="opencard" data-id="${esc(I.card)}">Ver o cartão</button><label class="btn big" for="impFile">Conferir outra fatura</label></div>
-    <input type="file" id="impFile" accept=".pdf,.csv,.ofx,.txt${S.caps.sample?',image/*':''}" hidden>
     <p class="small muted" style="margin:0">Errou? Em Cartões, toque em "Desfazer conferência" para voltar como estava.</p></section>`;
   if(I.stage==='busy') return `<section class="card"><div class="empty"><span class="spinner"></span> ${esc(I.msg||'Lendo a fatura…')}</div>${I.stream?`<pre class="small muted" style="white-space:pre-wrap;max-height:160px;overflow:auto">${esc(I.stream.slice(-600))}</pre>`:''}</section>`;
   return viewConciliacao();
@@ -1509,15 +1509,33 @@ async function aprender(desc,cat,quem){
 }
 
 /* ===================== leitura de faturas ===================== */
+// O campo de arquivo fica fora da tela que é redesenhada: no Android, se ele some antes da leitura, o arquivo pode chegar vazio.
+async function abrirCompartilhada(){ // fatura enviada pelo "Compartilhar" do celular
+  try{ if(!('caches' in window)) return; const c=await caches.open('compartilhado'); const r=await c.match('./fatura-compartilhada'); if(!r) return;
+    const b=await r.blob(); const nome=decodeURIComponent(r.headers.get('x-nome')||'fatura.pdf'); await caches.delete('compartilhado');
+    if(location.hash!=='#importar') location.hash='#importar'; setTimeout(()=>handleFile(new File([b],nome,{type:b.type||'application/pdf'})),50);
+  }catch(e){}
+}
+function campoArquivo(){ let i=document.getElementById('impFile'); if(!i){ i=document.createElement('input'); i.type='file'; i.id='impFile'; i.hidden=true; document.body.appendChild(i); } i.accept='.pdf,.csv,.ofx,.txt'+(S.caps?.sample?',image/*':''); return i; }
+async function lerBytes(file){ // lê o arquivo inteiro antes de qualquer outra coisa; tenta de novo por outro caminho se vier vazio
+  let b=null; try{ b=await file.arrayBuffer(); }catch(e){}
+  if(!b||!b.byteLength){ b=await new Promise(res=>{ try{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(null); fr.readAsArrayBuffer(file); }catch(e){ res(null); } }); }
+  return b&&b.byteLength?b:null;
+}
+const ERRO_VAZIO='O celular entregou o arquivo vazio (0 bytes). Isso costuma acontecer quando o PDF está no WhatsApp, Gmail ou Drive e ainda não foi baixado. Abra o PDF, toque em Baixar ou Salvar no aparelho e escolha de novo pela pasta Downloads.';
 async function handleFile(file){
   if(!file) return;
   if(file.size>25e6){ S.imp={stage:'pick',err:'Arquivo grande demais (máximo 25 MB).'}; render(); return; }
-  const name=file.name||'arquivo'; S.imp={stage:'busy',msg:'Abrindo '+name+'…',fileName:name,card:S.impCard||S.card}; render();
+  const name=file.name||'arquivo', ehPdf=/\.pdf$/i.test(name)||file.type==='application/pdf';
+  const bytes=ehPdf?await lerBytes(file):null;
+  if(ehPdf&&!bytes){ S.imp={stage:'pick',err:ERRO_VAZIO}; render(); const fi=document.getElementById('impFile'); if(fi) fi.value=''; return; }
+  if(ehPdf){ const h=new Uint8Array(bytes.slice(0,1024)); let ok=false; for(let i=0;i<h.length-4;i++) if(h[i]===37&&h[i+1]===80&&h[i+2]===68&&h[i+3]===70){ ok=true; break; } if(!ok){ S.imp={stage:'pick',err:'Este arquivo não parece ser um PDF (talvez seja um atalho ou uma página da web salva). Baixe a fatura em PDF no app do banco e tente de novo.'}; render(); return; } }
+  S.imp={stage:'busy',msg:'Abrindo '+name+'…',fileName:name,card:S.impCard||S.card}; render();
   try{
-    if(/\.pdf$/i.test(name)||file.type==='application/pdf'){ S.imp.buf=await file.arrayBuffer(); await openPdf(); }
+    if(ehPdf){ S.imp.buf=bytes; await openPdf(); }
     else if(/^image\//.test(file.type)){ await readImages([file]); }
     else { const lp=limparDadosPessoais(await file.text()); const t=lp.t; S.imp.text=t; S.imp.limpos=lp.n; const rows=/<STMTTRN>/i.test(t)?parseOFX(t):(/[;,]/.test(t.split('\n')[0])&&parseCSV(t).length?parseCSV(t):parseFaturaText(t)); toReview(rows,'auto'); }
-  }catch(e){ S.imp={stage:'pick',err:'Não consegui ler o arquivo: '+(e.message||e)}; render(); }
+  }catch(e){ const m=String(e&&e.message||e); S.imp={stage:'pick',err:/empty|zero bytes/i.test(m)?ERRO_VAZIO:/Invalid PDF|corrupt|structure/i.test(m)?'O PDF parece estar danificado ou incompleto. Baixe a fatura de novo no app do banco.':'Não consegui ler o arquivo: '+m}; render(); }
   const fi=document.getElementById('impFile'); if(fi) fi.value='';
 }
 function b64url(b,type){const bin=atob(b);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return URL.createObjectURL(new Blob([u],{type}))}
@@ -1994,6 +2012,7 @@ async function unlockData(){
   fromLocal(); hideGate(); lastAct=Date.now();
   if(backupDue()) setTimeout(sheetBackupMensal,300);
   copiaDiaria().then(()=>{ if(S.tab==='ajustes'||S.pastaPend) render(); });
+  abrirCompartilhada();
 }
 function hideGate(){ $('#gate').hidden=true; $('#gate').innerHTML=''; document.body.classList.remove('locked'); G.st=null; render(); }
 function lock(){ if(S.mode!=='local') return; cryptoKey=null; driveTok=null; local=emptyLocal(); S.imp=null; S.restore=null; S.draftCfg=null; S.draftDirty=false; fromLocal(); showGate('login'); }
