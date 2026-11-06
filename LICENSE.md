@@ -1,9 +1,9 @@
 # Licença
 
-Saldo Certo © 2026 Nayane Fonteles.
+Saldo Certo © 2026 Cleirton Monte.
 
 Este app é gratuito. Você pode usar, copiar e compartilhar, desde que:
-- cite a autora (Nayane Fonteles);
+- cite o autor (Cleirton Monte);
 - não use para fins comerciais (não vender, não cobrar pelo uso);
 - compartilhe versões modificadas sob estas mesmas condições.
 

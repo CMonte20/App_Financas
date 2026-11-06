@@ -498,14 +498,14 @@ function normCfg(c){
 /* ===================== estado ===================== */
 const S={cfg:null,lanc:[],compras:[],conf:{},pagos:{},ativos:[],hist:{},mes:ymNow(),tab:'mes',mesView:'resumo',card:null,mode:'loading',got:{},note:'',imp:null,caps:{}};
 const POLITICA_VERSAO='1.0';
-const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. O app funciona sem servidor: tudo é processado e guardado no seu aparelho. A criadora do app não coleta, não recebe e não tem acesso a nenhum dado.</p>
+const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. O app funciona sem servidor: tudo é processado e guardado no seu aparelho. O criador do app não coleta, não recebe e não tem acesso a nenhum dado.</p>
 <p style="margin:0"><b>2. Dados tratados.</b> Lançamentos financeiros (valores, descrições, datas, categorias), cartões, contas, investimentos, bens e dívidas que você cadastrar; o texto das faturas que você importar, já sem CPF, CNPJ, número de cartão, e-mail, telefone e CEP; seu nome de usuário e o e-mail mascarado.</p>
 <p style="margin:0"><b>3. Finalidade e base legal.</b> Controle financeiro pessoal, com o seu consentimento (LGPD, art. 7º, I). Uso pessoal e doméstico.</p>
 <p style="margin:0"><b>4. Armazenamento e segurança.</b> Dados cifrados com AES-256-GCM; senha guardada só como hash (PBKDF2-SHA-256); bloqueio automático; sem rastreadores, anúncios ou análises de uso.</p>
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Nayane Fonteles', VERSAO='3.1';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='3.1';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],['patrimonio','Patrimônio','<path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -1749,7 +1749,7 @@ function renderGate(){
     <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
       <li><b>O que o app guarda:</b> os valores e descrições que você digita ou importa das faturas e um e-mail mascarado para lembrar onde está o código de recuperação.</li>
       <li><b>Para quê:</b> só para você controlar as suas finanças.</li>
-      <li><b>Onde fica:</b> só neste aparelho, criptografado com a sua senha. Nada vai para servidores; a criadora do app não recebe nenhum dado.</li>
+      <li><b>Onde fica:</b> só neste aparelho, criptografado com a sua senha. Nada vai para servidores; o criador do app não recebe nenhum dado.</li>
       <li><b>Faturas:</b> o PDF não é guardado. Dados pessoais como CPF e número do cartão são apagados do texto lido.</li>
       <li><b>Compartilhamento:</b> nenhum. O backup só sai do aparelho quando você manda (WhatsApp, Drive, e-mail).</li>
       <li><b>Seus direitos:</b> ver e exportar tudo (backup e Excel), corrigir qualquer dado e apagar tudo quando quiser, em Ajustes.</li>
