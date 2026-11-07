@@ -706,6 +706,18 @@ function valorLanc(l,M){
   return +l.valor;
 }
 const parcNo=(c,M)=>(+c.parcRef||1)+diffM(c.mesRef,M);
+// "Parcela neste mês" = k no mês Mb. k=0: ainda não cobrou, a 1ª parcela vem no mês seguinte.
+function parcPlan(Mb,k,n){ return k===0?{mesRef:addM(Mb,1),parcRef:1,nTotal:n}:{mesRef:Mb,parcRef:k,nTotal:n}; }
+function lerParc(fd){ const ks=String(fd.get('k')??'1').trim(), ns=String(fd.get('n')??'1').trim(); const k=ks===''?1:parseInt(ks,10), n=ns===''?1:parseInt(ns,10);
+  if(!Number.isInteger(k)||k<0) return {erro:'A parcela deste mês precisa ser um número: 0 (começa no mês que vem), 1, 2…'};
+  if(!Number.isInteger(n)||n<1||n>120) return {erro:'O total de parcelas precisa ser de 1 a 120.'};
+  if(k>n) return {erro:`A parcela deste mês (${k}) não pode ser maior que o total (${n}).`};
+  return {k,n}; }
+function mesDoForm(fd){ const m=String(fd.get('mesBase')||''); return YM.test(m)?m:S.mes; }
+function parcResumo(Mb,k,n){ const pl=parcPlan(Mb,k,n), p1=pl.mesRef, ult=addM(pl.mesRef,n-pl.parcRef);
+  if(n===1) return k===0?`Cai em ${mShort(p1)} (mês seguinte).`:`Cai em ${mShort(Mb)}.`;
+  const prim=addM(p1,1-pl.parcRef); return `${k===0?'Nada em '+mShort(Mb)+'. ':''}Parcela 1 de ${n} em ${mShort(prim)}${prim!==Mb&&k>1?' (já passou)':''} · última (${n}ª) em ${mShort(ult)}.`; }
+function parcSync(f){ if(!f) return; const out=f.querySelector('.parcprev'); if(!out) return; const fd=new FormData(f); if(fd.get('recc')){ out.textContent='Assinatura: cobra todo mês a partir de '+mShort(mesDoForm(fd))+'.'; return; } const r=lerParc(fd); out.textContent=r.erro?'⚠ '+r.erro:parcResumo(mesDoForm(fd),r.k,r.n); out.classList.toggle('bad',!!r.erro); }
 // Marco zero: o controle começa no mês em que a pessoa começou a usar o app. Antes dele nada é cobrado nem previsto.
 const inicioCtrl=()=>{ const i=S.cfg&&S.cfg.inicio; return YM.test(i||'')?i:null; };
 const antesInicio=M=>{ const i=inicioCtrl(); return !!(i&&diffM(M,i)>0); };
@@ -1697,7 +1709,7 @@ function restoreBox(){
 }
 
 /* ===================== folhas (formulários) ===================== */
-function openSheet(html){$('#sheet').innerHTML=`<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;const f=$('#sheet input:not([type=hidden]):not([type=checkbox]),#sheet select');if(f&&window.innerWidth>700) f.focus()}
+function openSheet(html){$('#sheet').innerHTML=`<div class="scrim" data-act="closesheet"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;const f=$('#sheet input:not([type=hidden]):not([type=checkbox]),#sheet select');if(f&&window.innerWidth>700) f.focus(); const pf=$('#fNovo,#fCompra'); if(pf) parcSync(pf);}
 function closeSheet(){$('#sheet').innerHTML='';S.sheetCtx=null}
 const grpOpts=v=>`<option value="">Automático pela categoria</option>`+cfg().grupos.map(g=>`<option ${g.nome===v?'selected':''}>${esc(g.nome)}</option>`).join('');
 const grpOptsReq=v=>`<option value="">Sem grupo</option>`+cfg().grupos.map(g=>`<option ${g.nome===v?'selected':''}>${esc(g.nome)}</option>`).join('');
@@ -1714,12 +1726,15 @@ function sheetNovo(tipo='despesa',rec=null){
     <label class="f">Descrição<input class="i" name="desc" required autocomplete="off" placeholder="${isC?'Ex.: Café':tipo==='entrada'?'Ex.: Salário':'Ex.: Escola dos filhos'}"></label>
     ${isC?`<div class="frow"><label class="f">Cartão<select class="i" name="cartao">${cfg().cartoes.map(c=>`<option value="${esc(c.id)}" ${c.id===S.card?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></label>
       <label class="f">Valor (da parcela)<input class="i" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label></div>
-      <div class="frow"><label class="f">Parcela neste mês<input class="i" name="k" value="1" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="1" inputmode="numeric"></label></div>
+      <label class="f">Mês da fatura<input class="i" type="month" name="mesBase" value="${esc(S.mes)}" style="max-width:200px"></label>
+      <div class="frow"><label class="f">Parcela nesse mês <span class="small muted">(0 = começa no mês seguinte)</span><input class="i" name="k" value="1" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="1" inputmode="numeric"></label></div>
+      <p class="small muted parcprev" style="margin:0" aria-live="polite"></p>
       <div class="frow"><label class="f">De quem é<input class="i" name="quem" list="dlPessoas" placeholder="${EU}"></label><label class="f">Categoria<select class="i" name="cat"><option value="">Automática</option>${catOpts('')}</select></label></div>
       ${fixoSel(S.card||cfg().cartoes[0]?.id,'')}
       <label class="check"><input type="checkbox" name="recc"> Cobrança todo mês (assinatura)</label>`
     :`${tipo==='entrada'?`<div class="chips" role="group" aria-label="Tipo de entrada">${[['Salário',1],['13º salário',0],['Férias',0],['Bônus ou PLR',0],['Renda extra',0]].map(([d,r])=>`<button type="button" class="chip" data-act="entpreset" data-d="${d}" data-r="${r}">${d}</button>`).join('')}</div><p class="small muted" style="margin:0">Férias, 13º e bônus entram só no mês em que chegam e fazem parte dos 100% do plano daquele mês.</p>`:''}
       <div class="frow"><label class="f">Valor<input class="i" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>${tipo==='despesa'?`<label class="f">Grupo do plano<select class="i" name="grupo">${grpOptsReq('Fixo')}</select></label>`:''}</div>
+      <label class="f">Mês<input class="i" type="month" name="mesBase" value="${esc(S.mes)}" style="max-width:200px"></label>
       ${tipo==='despesa'?`<label class="f" id="invLugar" hidden>Em qual lugar do Patrimônio ficou?<select class="i" name="lugar"><option value="">Decido depois (aparece em Patrimônio)</option>${S.ativos.filter(a=>a.classe==='invest').map(a=>`<option value="${esc(a.id)}">${esc(a.nome||a.tipo)}${a.inst?' · '+esc(a.inst):''}</option>`).join('')}</select></label>
       <label class="f">Categoria<select class="i" name="cat"><option value="">Automática</option>${catOpts('')}</select></label>${cartaoFixoSel('','')}
       <div class="hint small" id="finHint">É financiamento ou empréstimo (casa, carro, consignado)? <button type="button" class="btn" style="padding:4px 10px;margin-left:4px" data-act="novofin">Lançar como financiamento</button><br><span class="muted">Assim o app sabe quantas parcelas faltam, para de cobrar quando acabar e desconta a dívida do seu patrimônio.</span>${dividas().length?`<br>Pagou uma amortização? <button type="button" class="btn" style="padding:4px 10px;margin-top:4px" data-act="amortnovo">Registrar amortização</button>`:''}</div>`:''}
@@ -1756,7 +1771,8 @@ function sheetCompra(id,kAt){
     <label class="f">Descrição<input class="i" name="desc" value="${esc(d.desc)}" required></label>
     <div class="frow"><label class="f">Cartão<select class="i" name="cartao">${cfg().cartoes.map(o=>`<option value="${esc(o.id)}" ${o.id===d.cartao?'selected':''}>${esc(o.nome)}</option>`).join('')}</select></label>
     <label class="f">Valor (da parcela)<input class="i" name="valor" value="${esc(String(d.valor).replace('.',','))}" inputmode="numeric" data-money placeholder="R$ 0,00" required></label></div>
-    ${d.recorrente?'':`<div class="frow"><label class="f">Parcela em ${esc(mShort(S.mes))}<input class="i" name="k" value="${esc(k)}" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="${esc(n)}" inputmode="numeric"></label></div>`}
+    ${d.recorrente?'':`<label class="f">No mês<input class="i" type="month" name="mesBase" value="${esc(S.mes)}" style="max-width:200px"></label><div class="frow"><label class="f">Parcela nesse mês <span class="small muted">(0 = começa no mês seguinte)</span><input class="i" name="k" value="${esc(k)}" inputmode="numeric"></label><label class="f">Total de parcelas<input class="i" name="n" value="${esc(n)}" inputmode="numeric"></label></div>
+    <p class="small muted parcprev" style="margin:0" aria-live="polite"></p>`}
     <div class="frow"><label class="f">De quem é<input class="i" name="quem" list="dlPessoas" value="${esc(d.quem)}" placeholder="${EU}"></label><label class="f">Categoria<select class="i" name="cat"><option value="">Automática (${esc(catOf({...d,cat:''}))})</option>${catOpts(d.cat||'')}</select></label></div>
     <label class="f">Grupo do plano<select class="i" name="grupo">${grpOpts(d.grupo)}</select></label>
     ${fixoSel(d.cartao,d.fixo||'')}
@@ -2483,11 +2499,13 @@ document.addEventListener('submit',async e=>{
   try{
   if(f.id==='fNovo'){
     const tipo=S.sheetCtx.tipo; const desc=String(fd.get('desc')||'').trim().slice(0,200); const valor=num(fd.get('valor')); if(!desc) return;
-    if(tipo==='compra'){ const k=Math.max(1,parseInt(fd.get('k'))||1), n=Math.max(k,parseInt(fd.get('n'))||1); const quem=await ensurePessoa(fd.get('quem')); const cat=fd.get('cat')||'';
-      const rec=!!fd.get('recc'); const fx=fd.get('fixo')||''; await put('compras',uid('c'),{cartao:fd.get('cartao'),desc,valor,mesRef:M,parcRef:rec?1:k,nTotal:rec?1:n,recorrente:rec,quem,grupo:'',cat,data:'',origem:'manual',fixo:fx==='-'||S.lanc.some(l=>l.id===fx)?fx:''}); if(cat) await aprender(desc,cat); }
-    else { const lid=uid('l'); await put('lanc',lid,{tipo,desc,valor,grupo:tipo==='despesa'?(fd.get('grupo')||''):'',cat:fd.get('cat')||'',cartao:tipo==='despesa'?(parseForma(fd.get('cartaoFixo')||'')||{}).cartao||'':'',forma:tipo==='despesa'?(parseForma(fd.get('cartaoFixo')||'')||{}).forma||'':'',dia:Math.max(0,Math.min(31,parseInt(fd.get('dia'))||0)),recorrente:!!fd.get('rec'),mes:M,fim:null,ajustes:{},origem:'manual'});
-      const lug=S.ativos.find(a=>a.id===fd.get('lugar')&&a.classe==='invest'); if(tipo==='despesa'&&fd.get('grupo')==='Investimento'&&lug&&valor>0){ await registrarMov(lug,'aporte',valor,M,{origem:'lanc',lancId:lid,desc}); await patch('lanc',lid,{alocado:{[M]:lug.id}}); closeSheet(); toast('Salvo e somado em '+(lug.nome||lug.tipo)); return; } }
-    closeSheet(); toast('Lançamento salvo');
+    if(tipo==='compra'){ const rec=!!fd.get('recc'), Mb=mesDoForm(fd), pr=rec?{k:1,n:1}:lerParc(fd); if(pr.erro){ toast(pr.erro); return; }
+      const pl=rec?{mesRef:Mb,parcRef:1,nTotal:1}:parcPlan(Mb,pr.k,pr.n); const quem=await ensurePessoa(fd.get('quem')); const cat=fd.get('cat')||'';
+      const fx=fd.get('fixo')||''; await put('compras',uid('c'),{cartao:fd.get('cartao'),desc,valor,...pl,recorrente:rec,quem,grupo:'',cat,data:'',origem:'manual',fixo:fx==='-'||S.lanc.some(l=>l.id===fx)?fx:''}); if(cat) await aprender(desc,cat);
+      closeSheet(); toast('Compra salva. '+(rec?'Assinatura a partir de '+mShort(Mb)+'.':parcResumo(Mb,pr.k,pr.n))); return; }
+    else { const ML=mesDoForm(fd), lid=uid('l'); await put('lanc',lid,{tipo,desc,valor,grupo:tipo==='despesa'?(fd.get('grupo')||''):'',cat:fd.get('cat')||'',cartao:tipo==='despesa'?(parseForma(fd.get('cartaoFixo')||'')||{}).cartao||'':'',forma:tipo==='despesa'?(parseForma(fd.get('cartaoFixo')||'')||{}).forma||'':'',dia:Math.max(0,Math.min(31,parseInt(fd.get('dia'))||0)),recorrente:!!fd.get('rec'),mes:ML,fim:null,ajustes:{},origem:'manual'});
+      const lug=S.ativos.find(a=>a.id===fd.get('lugar')&&a.classe==='invest'); if(tipo==='despesa'&&fd.get('grupo')==='Investimento'&&lug&&valor>0){ await registrarMov(lug,'aporte',valor,ML,{origem:'lanc',lancId:lid,desc}); await patch('lanc',lid,{alocado:{[ML]:lug.id}}); closeSheet(); toast('Salvo e somado em '+(lug.nome||lug.tipo)); return; }
+      closeSheet(); toast(ML===S.mes?'Lançamento salvo':'Lançamento salvo em '+mLabel(ML)); return; }
   } else if(f.id==='fLanc'){
     const l=S.lanc.find(x=>x.id===S.sheetCtx.id); const valor=num(fd.get('valor')); const desc=String(fd.get('desc')||'').trim().slice(0,200); const grupo=fd.get('grupo')??l.grupo; const cat=fd.get('cat')??l.cat??''; const pf=parseForma(fd.get('cartaoFixo')); const cartao=pf?pf.cartao:(l.cartao||''); const forma=pf?pf.forma:(l.forma||''); const dia=fd.get('dia')!=null?Math.max(0,Math.min(31,parseInt(fd.get('dia'))||0)):(l.dia||0);
     if(how==='only'){ await put('lanc',l.id,{...strip(l),desc,grupo,cat,cartao,forma,dia,ajustes:Object.assign({},l.ajustes,{[M]:valor})}); }
@@ -2577,19 +2595,20 @@ document.addEventListener('submit',async e=>{
     if(puts.length) await putMany('ativos',puts); closeSheet(); toast(puts.length?puts.length+' saldo(s) atualizado(s)':'Nada mudou');
   } else if(f.id==='fCompra'){
     const id=S.sheetCtx.id; const old=id?S.compras.find(x=>x.id===id):null; const rec=!!fd.get('recc');
-    const k=Math.max(1,parseInt(fd.get('k'))||1), n=Math.max(k,parseInt(fd.get('n'))||1); const quem=await ensurePessoa(fd.get('quem'));
+    const Mb=mesDoForm(fd), pr=rec?{k:1,n:1}:lerParc(fd); if(pr.erro){ toast(pr.erro); return; } const k=pr.k, n=pr.n; const quem=await ensurePessoa(fd.get('quem'));
     const desc=String(fd.get('desc')||'').trim().slice(0,200), cat=fd.get('cat')||'';
     const fx=fd.get('fixo'); const o={...(old?strip(clone(old)):{}),cartao:fd.get('cartao'),desc,valor:num(fd.get('valor')),quem,grupo:fd.get('grupo')||'',cat,recorrente:rec,fixo:fx==null?(old?.fixo||''):(fx==='-'||S.lanc.some(l=>l.id===fx)?fx:'')};
-    if(rec){ if(!old||!old.recorrente){ o.mesRef=M; o.parcRef=1; o.nTotal=1; } }
-    else { o.mesRef=M; o.parcRef=k; o.nTotal=n; if(old?.origem==='planilha'&&(k!==1||n!==old.nTotal)) o.origem='manual'; }
+    if(rec){ if(!old||!old.recorrente){ o.mesRef=Mb; o.parcRef=1; o.nTotal=1; } }
+    else { Object.assign(o,parcPlan(Mb,k,n)); if(old?.recorrente){ delete o.fim; delete o.pular; } if(old?.origem==='planilha'&&(k!==1||n!==old.nTotal)) o.origem='manual'; }
     if(!old) o.origem='manual';
     await put('compras',id||uid('c'),o);
     await aprender(desc,cat,old?(quem!==(old.quem||'')?quem:undefined):undefined);
-    closeSheet(); toast('Compra salva');
+    closeSheet(); toast('Compra salva. '+(rec?'Assinatura.':parcResumo(Mb,k,n)));
   }
   }catch(err){ toast('Não consegui salvar: '+(err.code||err.message||'erro')); }
 });
 document.addEventListener('input',e=>{
+  { const pf=e.target.closest&&e.target.closest('#fNovo,#fCompra'); if(pf) parcSync(pf); }
   if(e.target.matches?.('input[data-money]')) maskMoney(e.target,e);
   if(e.target.closest?.('#fOnde')){ const box=$('#ondeTot'); if(box) box.innerHTML=ondeTotHtml($('#fOnde')); }
   const t=e.target;
