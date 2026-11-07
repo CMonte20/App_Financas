@@ -591,7 +591,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.6';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.7';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 18v-7M9 14l3-3 3 3"/>'],['patrimonio','Patrimônio','<path d="M1.5 12L8 6.5l6.5 5.5M3.5 10.5V20h9v-9.5M6.5 20v-4h3v4"/><circle cx="18.5" cy="15.5" r="4"/><path d="M18.5 13.3v4.4M17.2 14.3h2.1a.8.8 0 010 1.6h-1.6a.8.8 0 000 1.6h2.1"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -803,12 +803,23 @@ function reserva(M){
   const first=R.desde||firstDataMonth(); let ap=0;
   if(first) for(let m=R.desde?addM(R.desde,1):first; diffM(m,ate)>=0; m=addM(m,1)) ap+=sum(calc(m).inv.filter(x=>catOf(x)==='Reserva de emergência'),x=>x.v);
   const base=R.base==='todos'?'todos':'fixos';
-  const ms=[]; for(let i=0;i<6&&ms.length<3;i++){ const m=addM(ate,-i); if(hasData(m)){ const g=gastos(m); ms.push(base==='todos'?g.total:r2(sum(g.items.filter(x=>x.fixo&&x.valor>0),x=>x.valor))); } }
+  const ms=[], usados=[]; for(let i=0;i<6&&ms.length<3;i++){ const m=addM(ate,-i); if(hasData(m)){ usados.push(m); ms.push(base==='todos'?gastos(m).total:fixosMes(m).total); } }
   const resAt=S.ativos.filter(a=>a.classe==='invest'&&a.objetivo==='Reserva de emergência');
   const custo=ms.length?sum(ms)/ms.length:0, meta=custo*(+R.meses||6), atual=resAt.length?sum(resAt,a=>valAtivo(a,ate)):(+R.atual||0)+ap;
   const aportes=[]; for(let i=0;i<3;i++){ const c=calc(addM(ate,-i)); aportes.push(sum(c.inv.filter(x=>catOf(x)==='Reserva de emergência'),x=>x.v)+sum(c.movs.filter(m=>m.tipo==='aporte'&&S.ativos.find(a=>a.id===m.ativoId)?.objetivo==='Reserva de emergência'),m=>m.valor)); } const ritmo=sum(aportes)/3;
   const falta=Math.max(0,meta-atual);
-  return {usar:R.usar!==false,base,custo,meta,atual,falta,meses:+R.meses||6,cobre:custo?atual/custo:0,ritmo,prazo:ritmo>0?Math.ceil(falta/ritmo):null};
+  return {usar:R.usar!==false,base,custo,meta,atual,falta,meses:+R.meses||6,cobre:custo?atual/custo:0,ritmo,prazo:ritmo>0?Math.ceil(falta/ritmo):null,usados,ms};
+}
+// Gastos fixos da reserva = o que se repete todo mês, pelo valor cadastrado:
+// contas fixas (a paga no cartão entra pela estimativa, não pelas compras da categoria), parcelas de financiamento e assinaturas do cartão.
+// Compras avulsas da mesma categoria (ex.: supermercado) NÃO entram, para a média não virar o gasto total.
+function fixosMes(M){
+  const mk='f'+M; if(memo.has(mk)) return memo.get(mk);
+  const c=calc(M), items=[];
+  for(const d of c.des){ if(!d.recorrente) continue; const v=d.cardNome?+d.estimado||0:+d.v||0; if(v>0) items.push({desc:d.desc,valor:r2(v),tipo:d.virtual?'financiamento':d.cardNome?'conta no cartão '+d.cardNome:'conta fixa'}); }
+  for(const k of c.cards) for(const x of k.itens) if(x.recorrente&&!x.quem&&!x.fixoId&&x.valor>0) items.push({desc:x.desc,valor:r2(x.valor),tipo:'assinatura no '+k.nome});
+  items.sort((a,b)=>b.valor-a.valor);
+  const r={items,total:r2(sum(items,x=>x.valor))}; memo.set(mk,r); return r;
 }
 function negCard(){ const H=histNegativos(); if(!H.length) return '';
   const fonte=c=>c.fonte==='sobra'?`com a sobra de ${esc(mLabel(c.em))}`:`com ${esc(c.nome||'dinheiro guardado')}`;
@@ -822,7 +833,12 @@ function reservaCard(M){
   const p=r.meta?Math.min(100,r.atual/r.meta*100):0;
   return `<section class="card grid"><div class="sechead"><h2>Reserva de emergência</h2><span class="small muted">meta: ${r.meses} meses ${oq}</span></div>
     <div class="bud"><div class="b"><span><b>${brl(r.atual)}</b> <span class="small muted">de ${brl(r.meta)}</span></span><span class="num" style="font-weight:700">${Math.round(p)}%</span><div class="track"><span style="width:${p}%"></span></div></div></div>
-    <p class="small" style="margin:0">Cobre ${r.cobre.toLocaleString('pt-BR',{maximumFractionDigits:1})} ${r.cobre>=1&&r.cobre<2?'mês':'meses'} ${oq} (média de ${brl(r.custo)} por mês${r.base==='fixos'?': contas fixas, financiamentos e assinaturas':''}).${r.falta>0?(r.prazo?` No ritmo atual (${brl(r.ritmo)} por mês) você chega à meta em ${r.prazo} ${r.prazo===1?'mês':'meses'}.`:` Faltam ${brl(r.falta)}. Lance os aportes na categoria "Reserva de emergência".`):' Meta atingida.'}</p>
+    <p class="small" style="margin:0">Cobre ${r.cobre.toLocaleString('pt-BR',{maximumFractionDigits:1})} ${r.cobre>=1&&r.cobre<2?'mês':'meses'} ${oq} (média de ${brl(r.custo)} por mês${r.usados.length?' em '+r.usados.length+(r.usados.length>1?' meses':' mês'):''}${r.base==='fixos'?': contas fixas, financiamentos e assinaturas':''}).${r.falta>0?(r.prazo?` No ritmo atual (${brl(r.ritmo)} por mês) você chega à meta em ${r.prazo} ${r.prazo===1?'mês':'meses'}.`:` Faltam ${brl(r.falta)}. Lance os aportes na categoria "Reserva de emergência".`):' Meta atingida.'}</p>
+    ${r.usados.length?(()=>{ const m0=r.usados[0], f=r.base==='fixos'?fixosMes(m0):null;
+      return `<details class="small"><summary>O que entra na média</summary>
+      <p class="muted" style="margin:6px 0">${r.usados.map((m,i)=>`${esc(cap(mLabel(m)))}: ${brl(r.ms[i])}`).join(' · ')}</p>
+      ${f?`<div class="rows">${f.items.map(x=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="d">${esc(x.desc)}</span><span class="v">${brl(x.valor)}</span><span class="note">${esc(x.tipo)}</span></div>`).join('')}</div>
+      <p class="muted" style="margin:6px 0 0">Em ${esc(mLabel(m0))}: ${brl(f.total)}. Compras avulsas no cartão (mercado, lojas) não entram. Para usar todos os gastos, mude em Ajustes → Reserva de emergência.</p>`:'<p class="muted" style="margin:0">Todos os gastos do mês (a sua parte), sem investimentos.</p>'}</details>`; })():''}
   </section>`;
 }
 
@@ -975,12 +991,39 @@ function sheetSaldos(){
 /* ---------- calendário de vencimentos ---------- */
 function vencimentos(M){
   const c=calc(M), out=[], pg=S.pagos[M]||{}, now=ymNow(), hoje=new Date().getDate();
-  for(const k of c.cards) if(k.aPagar>0) out.push({key:'c_'+k.id,dia:+k.venc||0,nome:'Fatura '+k.nome,valor:k.aPagar,tipo:'cartao',forma:'Fatura'});
-  for(const d of c.des) if(!d.cartao&&d.v>0) out.push({key:'l_'+d.id,dia:+d.dia||0,nome:d.desc,valor:d.v,tipo:'conta',forma:FORMAS[d.forma]||''});
-  for(const v of out){ const p=pg[v.key]; v.pago=!!p; v.pagoEm=p&&typeof p==='object'?p:null;
+  for(const k of c.cards) if(k.aPagar>0) out.push({key:'c_'+k.id,dia:+k.venc||0,nome:'Fatura '+k.nome,valor:k.aPagar,tipo:'cartao',forma:'Fatura',outros:r2(k.aPagar-k.conta)});
+  for(const d of c.des) if(!d.cartao&&d.v>0) out.push({key:'l_'+d.id,dia:+d.dia||0,nome:d.desc,valor:d.v,tipo:'conta',forma:FORMAS[d.forma]||'',jaPago:d.origem==='adiantado'});
+  for(const v of out){ const p=pg[v.key]; v.pago=!!p||!!v.jaPago; /* pagamento antes do fechamento já saiu da conta: nasce pago */ v.pagoEm=p&&typeof p==='object'?p:null;
     if(v.pago) v.st='pago'; else if(!v.dia) v.st=diffM(M,now)>0?'atrasado':'semdia'; else if(diffM(M,now)>0||(M===now&&v.dia<hoje)) v.st='atrasado'; else if(M===now&&v.dia-hoje<=3) v.st='breve'; else v.st='futuro';
     v.falta=M===now&&v.dia?v.dia-hoje:null; }
   return out.sort((a,b)=>(a.dia||99)-(b.dia||99)||b.valor-a.valor);
+}
+// Conciliação: "Contas do mês" é o que sai para o banco; "Gastos" é a sua parte. Esta conta mostra a ponte entre os dois.
+function concilia(M){
+  const c=calc(M), V=vencimentos(M), lista=r2(sum(V,v=>v.valor));
+  const movidos=r2(sum(V.filter(v=>v.pagoEm&&v.pagoEm.em!==M),v=>v.valor));
+  const outros=r2(sum(c.cards.filter(k=>!k.movido&&k.aPagar>0),k=>k.aPagar-k.conta));
+  const est=r2(sum(c.des.filter(d=>d.cartao&&d.cardNome&&!d.movido),d=>d.v));
+  const semFat=r2(sum(c.cards.filter(k=>!k.movido&&!(k.aPagar>0)),k=>k.conta)); // cartão só com crédito/adiantamento
+  const negs=r2(sum(c.des.filter(d=>!d.cartao&&!d.movido&&!(d.v>0)),d=>d.v));
+  const gastosT=r2(c.totDes+c.totCard+c.totAtras);
+  const resid=r2(gastosT-(lista-movidos-outros+est+semFat+negs+c.totAtras));
+  return {lista,movidos,outros,est,semFat,negs,atras:c.totAtras,gastos:gastosT,resid};
+}
+function conciliaHtml(M){
+  const k=concilia(M); if(Math.abs(k.lista-k.gastos)<0.005) return '';
+  const L=[['Contas do mês (o que sai para o banco)',k.lista]];
+  if(k.outros) L.push([k.outros>0?'Compras de outras pessoas nas faturas':'Crédito de outras pessoas nas faturas',-k.outros]);
+  if(k.movidos) L.push(['Contas deste mês pagas em outro mês (contam lá)',-k.movidos]);
+  if(k.est) L.push(['Estimativas de contas fixas no cartão ainda não gastas',k.est]);
+  if(k.atras) L.push(['Contas atrasadas de meses anteriores pagas agora',k.atras]);
+  if(k.semFat) L.push(['Cartões sem fatura a pagar (crédito ou adiantamento)',k.semFat]);
+  if(k.negs) L.push(['Lançamentos negativos (estornos)',k.negs]);
+  if(Math.abs(k.resid)>=0.005) L.push(['Outros ajustes',k.resid]);
+  return `<details class="small concil"><summary>Por que é diferente dos Gastos (${brl(k.gastos)})?</summary>
+    <div class="rows" style="margin-top:6px">${L.map(([t,v],i)=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="d">${esc(t)}</span><span class="v num">${i&&v>0?'+ ':''}${v<0?'− '+brl(-v):brl(v)}</span></div>`).join('')}
+    <div class="row" style="grid-template-columns:minmax(0,1fr) auto;font-weight:700"><span class="d">= Gastos do mês (a sua parte)</span><span class="v num">${brl(k.gastos)}</span></div></div>
+    <p class="muted" style="margin:6px 0 0">A lista mostra a fatura cheia, porque é o que você paga ao banco. Os Gastos contam só o que é seu e incluem o que ainda está previsto para cair no cartão.</p></details>`;
 }
 function atrasadasAte(M){ // contas de meses anteriores que ficaram sem pagar
   const out=[]; // só a partir do primeiro mês em que a pessoa usou o checklist (evita "atrasadas" vindas do histórico importado)
@@ -999,8 +1042,8 @@ function vencCard(M){
     ${!pend.length&&all.length?'<div class="al ok"><span class="ic">✓</span><b>Todas as contas do mês estão pagas</b><span class="d">Bom trabalho.</span></div>':''}
     ${at.length?`<div class="atras"><div class="eyebrow" style="color:var(--out)">Atrasadas de meses anteriores · ${brl(sum(at,v=>v.valor))}</div>${at.map(v=>`<label class="cr" style="grid-template-columns:28px minmax(0,1fr) auto;cursor:pointer"><input type="checkbox" data-pagatras="${esc(v.mes+'|'+v.key)}" aria-label="Paguei ${esc(v.nome)} de ${esc(mLabel(v.mes))}"><span><b>${esc(v.nome)}</b></span><span class="v">${brl(v.valor)}</span><span class="meta" style="grid-column:2 / -1"><span class="chip bad">de ${esc(MESES[+v.mes.slice(5)-1])}</span><span>marque quando pagar</span></span></label>`).join('')}</div>`:''}
     <div class="rows" role="list">${vs.map(v=>`<label class="cr" role="listitem" style="grid-template-columns:28px 40px minmax(0,1fr) auto;cursor:pointer;${v.pago?'opacity:.6':''}"><input type="checkbox" data-pagar="${esc(v.key)}" ${v.pago?'checked':''} aria-label="${esc(v.nome)} paga"><span style="font-family:var(--display);font-weight:700;font-size:1.15rem;${v.st==='atrasado'?'color:var(--out)':v.st==='breve'?'color:var(--warn)':''}">${v.dia?String(v.dia).padStart(2,'0'):''}</span><span style="${v.pago?'text-decoration:line-through':''}"><b>${esc(v.nome)}</b></span><span class="v">${brl(v.valor)}</span>
-      <span class="meta" style="grid-column:3 / -1">${v.pago?(v.pagoEm&&v.pagoEm.em!==M?`<span class="chip warn">paga em ${esc(MESES[+v.pagoEm.em.slice(5)-1])} · ${brl(v.pagoEm.valor)}</span>`:'<span class="chip ok">paga ✓</span>'):''}${chip[v.st]}${v.st==='breve'?`<span class="chip warn">${v.falta===0?'vence hoje':v.falta===1?'vence amanhã':'vence em '+v.falta+' dias'}</span>`:''}${v.forma?`<span class="chip">${esc(v.forma)}</span>`:''}</span></label>`).join('')}</div>
-    ${all.length>vs.length||S.ckAll?`<button class="btn ghost" data-act="ckall">${S.ckAll?'Mostrar só as pendentes':`Ver todas (${all.length})`}</button>`:''}</section>`;
+      <span class="meta" style="grid-column:3 / -1">${v.pago?(v.pagoEm&&v.pagoEm.em!==M?`<span class="chip warn">paga em ${esc(MESES[+v.pagoEm.em.slice(5)-1])} · ${brl(v.pagoEm.valor)}</span>`:'<span class="chip ok">paga ✓</span>'):''}${chip[v.st]}${v.st==='breve'?`<span class="chip warn">${v.falta===0?'vence hoje':v.falta===1?'vence amanhã':'vence em '+v.falta+' dias'}</span>`:''}${v.forma?`<span class="chip">${esc(v.forma)}</span>`:''}${v.outros>0.005?`<span class="chip third">${brl(v.outros)} de outros · sua parte ${brl(v.valor-v.outros)}</span>`:''}</span></label>`).join('')}</div>
+    ${all.length>vs.length||S.ckAll?`<button class="btn ghost" data-act="ckall">${S.ckAll?'Mostrar só as pendentes':`Ver todas (${all.length})`}</button>`:''}${conciliaHtml(M)}</section>`;
 }
 /* ---------- pontos de atenção ---------- */
 function alertas(M){
