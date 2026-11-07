@@ -567,7 +567,7 @@ const DEFAULT_CFG={cartoes:[{id:'cartao1',nome:'Cartão 1'}],
   pessoas:[],diaPagamento:10,investInicial:0,driveClientId:'',
   categorias:CAT_DEF.map(([nome,grupo,corte])=>({nome,grupo,corte:!!corte})),regras:{},regrasQuem:{},portadores:{}};
 function normCfg(c){
-  c=clone(c||DEFAULT_CFG);
+  c=clone(c||DEFAULT_CFG); if(c.inicio!=null&&!YM.test(c.inicio)) delete c.inicio;
   c.cartoes=Array.isArray(c.cartoes)?c.cartoes:[];
   c.grupos=Array.isArray(c.grupos)&&c.grupos.length?c.grupos:clone(DEFAULT_CFG.grupos);
   for(const g of c.grupos){ if(g.nome==='Investimento'&&g.poupanca==null) g.poupanca=true; }
@@ -591,7 +591,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.5';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.6';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 18v-7M9 14l3-3 3 3"/>'],['patrimonio','Patrimônio','<path d="M1.5 12L8 6.5l6.5 5.5M3.5 10.5V20h9v-9.5M6.5 20v-4h3v4"/><circle cx="18.5" cy="15.5" r="4"/><path d="M18.5 13.3v4.4M17.2 14.3h2.1a.8.8 0 010 1.6h-1.6a.8.8 0 000 1.6h2.1"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -706,8 +706,12 @@ function valorLanc(l,M){
   return +l.valor;
 }
 const parcNo=(c,M)=>(+c.parcRef||1)+diffM(c.mesRef,M);
+// Marco zero: o controle começa no mês em que a pessoa começou a usar o app. Antes dele nada é cobrado nem previsto.
+const inicioCtrl=()=>{ const i=S.cfg&&S.cfg.inicio; return YM.test(i||'')?i:null; };
+const antesInicio=M=>{ const i=inicioCtrl(); return !!(i&&diffM(M,i)>0); };
+function calcVazio(M){ return {ent:[],des:[],inv:[],movs:[],cards:cfg().cartoes.map(c=>({...c,itens:[],total:0,credito:0,terc:0,tercP:{},nosso:0,resta:0,conf:null,abat:0,abatItens:[],adiantado:0,aPagar:0,naoPago:0,conta:0,fixTotal:0,fixResta:0})),terceiros:{},tercInfo:{},totTerc:0,atras:[],totEnt:0,totReemb:0,totDes:0,totCard:0,totAtras:0,totMovido:0,totInv:0,totAmort:0,aport:0,resg:0,saldo:0,antes:true}; }
 function comprasDoMes(M,cartao){
-  const out=[];
+  const out=[]; if(antesInicio(M)) return out;
   for(const c of S.compras){
     if(cartao&&c.cartao!==cartao) continue;
     if(c.recorrente){ if(diffM(c.mesRef,M)>=0&&(!c.fim||diffM(M,c.fim)>=0)&&!(c.pular||{})[M]) out.push({...c,k:1,nTotal:1}); continue; }
@@ -720,6 +724,7 @@ function comprasDoMes(M,cartao){
 function restante(x,M){ if(x.recorrente) return x.valor; if(x.antecipada) return x.valor; const n=+x.nTotal||1, pg=x.pagas||{}; let q=0; for(let j=x.k;j<=n;j++) if(!pg[j]||diffM(M,pg[j])>=0) q++; return x.valor*q; }
 function calc(M){
   const mk='c'+M; if(memo.has(mk)) return memo.get(mk);
+  if(antesInicio(M)){ const v=calcVazio(M); memo.set(mk,v); return v; }
   const ent=[],des=[],inv=[];
   const ehInv=l=>l.tipo==='despesa'&&(l.grupo==='Investimento'||l.grupo==='Amortização');
   for(const l of S.lanc){const v=valorLanc(l,M); if(v==null) continue; (l.tipo==='entrada'?ent:ehInv(l)?inv:des).push({...l,v,previsto:v});}
@@ -787,7 +792,7 @@ function plano(M){
 }
 function hasData(M){ const c=calc(M); return c.ent.length+c.des.length+sum(c.cards,k=>k.itens.length)>0 }
 function mediaCats(M,n){ const acc={}; let q=0; const first=firstDataMonth(); for(let i=1;i<=n;i++){ const m=addM(M,-i); if(!first||diffM(first,m)<0||!hasData(m)) continue; q++; for(const [c,v] of Object.entries(gastos(m).porCat)) acc[c]=(acc[c]||0)+v; } if(!q) return {}; for(const c in acc) acc[c]/=q; return acc; }
-function firstDataMonth(){const ms=[...S.lanc.map(l=>l.mes),...S.compras.map(c=>c.mesRef)].filter(Boolean).sort();return ms[0]||null}
+function firstDataMonth(){const ms=[...S.lanc.map(l=>l.mes),...S.compras.map(c=>c.mesRef)].filter(Boolean).sort(); let f=ms[0]||null; const i=inicioCtrl(); if(f&&i&&diffM(f,i)>0) f=i; return f;}
 function tercKey(pre,p){ return pre+(normDesc(p).replace(/ /g,'_').slice(0,40)||'x'); }
 function vencPassou(M,k){ const now=ymNow(); if(diffM(M,now)>0) return true; if(M!==now) return false; return new Date().getDate()>(+k.venc||+cfg().diaPagamento||10); }
 function passouPagamento(M){ const now=ymNow(); if(diffM(M,now)>0) return true; if(M!==now) return false; return new Date().getDate()>(+cfg().diaPagamento||10); }
@@ -1164,6 +1169,7 @@ function viewMes(){
   const M=S.mes, c=calc(M);
   const prev=diffM(ymNow(),M)>0;
   const seg=`<div class="seg segtop" role="tablist">${[['resumo','Resumo e plano'],['lanc','Lançamentos']].map(([k,l])=>`<button data-act="mesview" data-v="${k}" aria-pressed="${S.mesView===k}">${l}</button>`).join('')}</div>`;
+  if(antesInicio(M)) return `<div class="grid"><section class="card grid"><h2>${esc(cap(mLabel(M)))}</h2><p style="margin:0">Este mês é anterior ao início do seu controle (<b>${esc(mLabel(inicioCtrl()))}</b>). O app não cobra, não prevê e não marca nada como atrasado antes disso, mesmo que existam faturas ou parcelas daquela época.</p><div class="btnrow"><button class="btn pri" data-act="irinicio">Ir para ${esc(mLabel(inicioCtrl()))}</button><button class="btn" data-act="gotoajinicio">Mudar o início</button></div></section></div>`;
   const pv=prev?`<div class="banner" style="background:var(--third-soft);color:var(--third)">Mês futuro: valores previstos com salário, contas fixas, parcelas e assinaturas já cadastradas.</div>`:'';
   const A=S.mode==='local'?authRec():null; const h=new Date().getHours();
   const ola=A&&A.user?`<div class="hello"><span>${h<12?'Bom dia':h<18?'Boa tarde':'Boa noite'}, <b>${esc(cap(A.user))}</b></span><span class="muted small">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</span></div>`:'';
@@ -1531,6 +1537,8 @@ function viewAjustes(){
   </div></details>
   <details class="set" ${open('backup')} data-sec="backup"><summary>Backup <span class="small muted">último: ${lb?new Date(lb).toLocaleDateString('pt-BR'):'nunca'}</span></summary><div class="body">
     <label class="f">Dia em que você paga as contas (1 a 28)<input class="i num" data-cfg="diaPagamento" value="${esc(C.diaPagamento)}" inputmode="numeric" style="max-width:120px"></label>
+    <label class="f">Início do seu controle (marco zero)<input class="i" type="month" data-cfg="inicio" value="${esc(C.inicio||'')}" style="max-width:200px"></label>
+    <p class="small muted" style="margin:0">Antes deste mês o app não cobra, não prevê e não marca nada como atrasado, mesmo que existam faturas ou parcelas daquela época. As parcelas que continuam depois dele aparecem normalmente.</p>
     <p class="small muted" style="margin:0">Todo mês, depois desse dia, o app pede para fazer o backup do mês (com todas as faturas conferidas) e guarda o fechamento no histórico.</p>
     ${canSave()?`<div class="btnrow"><button class="btn pri" data-act="backupnow">Fazer backup agora</button>${canShare()?'<button class="btn" data-act="sharebackup">Enviar pelo WhatsApp, Drive ou Gmail</button>':''}<button class="btn" data-act="backup">Baixar backup no aparelho</button></div>${canShare()?'<p class="small muted" style="margin:0">No WhatsApp, mande para você mesmo (toque em "Conversar comigo" ou no seu próprio número). O arquivo vai criptografado: sem a sua senha ou o código de recuperação ninguém abre.</p>':''}`:'<p class="small muted">Para baixar arquivos, abra a página pelo Claude.</p>'}
     ${S.mode==='local'?`<div class="grid" style="gap:8px"><div class="eyebrow">Google Drive automático</div>${driveUI()}</div>`:''}
@@ -1673,6 +1681,12 @@ async function aprender(desc,cat,quem){
 
 /* ===================== leitura de faturas ===================== */
 // O campo de arquivo fica fora da tela que é redesenhada: no Android, se ele some antes da leitura, o arquivo pode chegar vazio.
+async function migrarInicio(){ try{ const C=S.cfg; if(!C||C.demo||C.inicio!==undefined) return;
+    // 1º: o mês mais antigo de um lançamento que a pessoa fez (salário, conta, gasto); faturas importadas não contam, porque podem ser de meses passados
+    const ms=S.lanc.filter(l=>l.origem!=='adiantado'&&YM.test(l.mes||'')).map(l=>l.mes).sort(); let ini=ms[0]||null;
+    if(!ini){ let min=null; for(const col of [S.lanc,S.compras,S.ativos]) for(const x of col){ const t=parseInt(String(x.id||'').slice(1,9),36); if(t>1.6e12&&t<Date.now()+864e5&&(min==null||t<min)) min=t; }
+      const d=min?new Date(min):new Date(); ini=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+    await saveCfg(Object.assign(clone(C),{inicio:ini})); render(); }catch(e){} }
 async function abrirCompartilhada(){ // fatura enviada pelo "Compartilhar" do celular
   try{ if(!('caches' in window)) return; const c=await caches.open('compartilhado'); const r=await c.match('./fatura-compartilhada'); if(!r) return;
     const b=await r.blob(); const nome=decodeURIComponent(r.headers.get('x-nome')||'fatura.pdf'); await caches.delete('compartilhado');
@@ -1996,6 +2010,7 @@ function sanitizeBackup(j){
     reserva:{usar:c.reserva?.usar!==false,base:c.reserva?.base==='todos'?'todos':'fixos',meses:Math.max(1,Math.min(24,parseInt(c.reserva?.meses)||6)),atual:sNum(c.reserva?.atual),desde:YM.test(c.reserva?.desde)?c.reserva.desde:null},
     grupos:(Array.isArray(c.grupos)?c.grupos:[]).slice(0,50).map(g=>({nome:sStr(g?.nome,60),meta:Math.max(0,Math.min(100,sNum(g?.meta))),poupanca:!!g?.poupanca})),
     pessoas:(Array.isArray(c.pessoas)?c.pessoas:[]).slice(0,200).map(p=>sStr(p,60)).filter(Boolean),
+    ...(YM.test(c.inicio||'')?{inicio:c.inicio}:{}),
     diaPagamento:Math.max(1,Math.min(28,parseInt(c.diaPagamento)||10)),demo:!!c.demo,investInicial:sNum(c.investInicial),driveClientId:/^[\w.-]+\.apps\.googleusercontent\.com$/.test(c.driveClientId||'')?c.driveClientId:'',
     categorias:(Array.isArray(c.categorias)?c.categorias:[]).slice(0,100).map(x=>({nome:sStr(x?.nome,60),grupo:sStr(x?.grupo,60),corte:!!x?.corte})).filter(x=>x.nome),
     regras:strMap(c.regras,60),regrasQuem:strMap(c.regrasQuem,60),portadores:strMap(c.portadores,60)}:null;
@@ -2023,6 +2038,7 @@ async function applyRestore(R){
   if(Object.keys(R.conferencias||{}).length) await putMany('conferencias',Object.entries(R.conferencias));
   if(Object.keys(R.pagos||{}).length) await putMany('pagos',Object.entries(R.pagos));
   if((R.ativos||[]).length) await putMany('ativos',R.ativos.map(a=>[a.id,strip(a)]));
+  if(R.config&&!R.config.inicio){ const C=clone(cfg()); delete C.inicio; S.cfg=C; await migrarInicio(true); } // backup antigo: o início é o primeiro mês com lançamento seu
 }
 
 /* ===================== digital / desbloqueio do celular (WebAuthn + PRF) ===================== */
@@ -2179,6 +2195,7 @@ async function unlockData(){
   const raw=lsGet(K.data);
   if(raw){ try{ local=Object.assign(emptyLocal(),await decJSON(cryptoKey,JSON.parse(raw))); }catch(e){ cryptoKey=null; showGate('login','Não consegui abrir os dados com esta senha.'); return; } }
   fromLocal(); hideGate(); lastAct=Date.now();
+  migrarInicio();
   if(backupDue()) setTimeout(sheetBackupMensal,300);
   copiaDiaria().then(()=>{ if(S.tab==='ajustes'||S.pastaPend) render(); });
   abrirCompartilhada();
@@ -2221,7 +2238,7 @@ document.addEventListener('click',async e=>{
   if(a==='closesheet'){ if(e.target===t||t.classList.contains('x')||t.tagName==='BUTTON') closeSheet(); return; }
   const M=S.mes;
   try{ switch(a){
-    case 'startcfg': await saveCfg(normCfg(DEFAULT_CFG)); S.openSet='fixos'; location.hash='#ajustes'; break;
+    case 'startcfg': await saveCfg(Object.assign(normCfg(DEFAULT_CFG),{inicio:ymNow()})); S.openSet='fixos'; location.hash='#ajustes'; break;
     case 'mesview': S.mesView=t.dataset.v; render(); break;
     case 'gomes': S.mes=t.dataset.m; S.mesView='resumo'; S._top=true; if(S.imp&&S.imp.stage==='done') S.imp=null; location.hash='#mes'; render(); break;
     case 'opencard': S.card=t.dataset.id; S.quemFilter=null; S._top=true; if(S.imp&&S.imp.stage==='done') S.imp=null; location.hash='#cartoes'; render(); break;
@@ -2298,10 +2315,12 @@ document.addEventListener('click',async e=>{
     case 'cfgdel': S.draftCfg[t.dataset.k].splice(+t.dataset.i,1); S.draftDirty=true; S.openSet=t.closest('details')?.dataset.sec; render(); break;
     case 'cfgundo': S.draftCfg=null; S.draftDirty=false; render(); break;
     case 'sototal': sheetSoTotal(); break;
+    case 'irinicio': S.mes=inicioCtrl()||ymNow(); location.hash='#mes'; render(); break;
+    case 'gotoajinicio': S.openSet='backup'; location.hash='#ajustes'; break;
     case 'novofin': { const d=$('#fNovo [name=desc]')?.value||''; S.finCtx={desc:d}; sheetAtivo(null,'divida'); (()=>{ const f=$('#fAtivo'); if(!f) return; if(f.tipo&&!f.tipo.value) f.tipo.value=/carro|moto|ve[ií]culo/i.test(d)?'Financiamento de veículo':/casa|apart|im[oó]vel/i.test(d)?'Financiamento imobiliário':''; if(f.nome&&d) f.nome.value=d; f.parcela?.focus(); })(); break; }
     case 'entpreset': { const f=$('#fNovo'); if(!f) return; f.desc.value=t.dataset.d; f.rec.checked=t.dataset.r==='1'; f.valor.focus(); break; }
     case 'metafill': { const C=S.draftCfg; if(!C) return; const g=grupoSobra(C); g.meta=pct1((+g.meta||0)+100-metaTotal(C)); S.draftDirty=true; S.openSet='plano'; render(); toast(g.nome+' ficou com '+String(g.meta).replace('.',',')+'%'); break; }
-    case 'cfgsave': { const C=S.draftCfg; C.grupos.forEach(g=>{g.meta=pct1(Math.max(0,Math.min(100,num(g.meta))))});
+    case 'cfgsave': { const C=S.draftCfg; if(!S.cfg&&!C.inicio) C.inicio=ymNow(); C.grupos.forEach(g=>{g.meta=pct1(Math.max(0,Math.min(100,num(g.meta))))});
       if(Math.abs(metaTotal(C)-100)>=0.05){ S.openSet='plano'; render(); const t=metaTotal(C); toast(t<100?`O plano precisa fechar 100%. Faltam ${String(pct1(100-t)).replace('.',',')}% para distribuir.`:`O plano passou de 100% (${String(t).replace('.',',')}%). Diminua algum grupo.`); setTimeout(()=>$('#metaInfo')?.scrollIntoView({block:'center'}),60); return; }
       if(C.cartoes.some(k=>pareceDadoBancario(k.nome))||(C.pessoas||[]).some(pareceDadoBancario)){ toast('Parece um número de cartão ou de conta. Use só um apelido, como "Nubank da Nay".'); return; } C.pessoas=(C.pessoas||[]).map(s=>String(s).trim().slice(0,60)).filter(Boolean); C.grupos.forEach(g=>{g.meta=Math.max(0,Math.min(100,num(g.meta)));g.nome=String(g.nome).slice(0,60)}); C.diaPagamento=Math.max(1,Math.min(28,parseInt(C.diaPagamento)||10)); C.investInicial=num(C.investInicial); C.driveClientId=String(C.driveClientId||'').trim();
       if(C.driveClientId&&!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(C.driveClientId)){ toast('ID do Google inválido: precisa terminar em .apps.googleusercontent.com'); return; }
