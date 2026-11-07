@@ -363,6 +363,10 @@ nav.tabs a>span.tl{display:block;max-width:100%;overflow:hidden;text-overflow:el
 @media (max-width:380px){nav.tabs a{font-size:9px;letter-spacing:-.3px}}
 @media (max-width:440px){nav.tabs a{font-size:9.5px;letter-spacing:-.35px;padding-left:0;padding-right:0}}
 @media (max-width:360px){nav.tabs a{font-size:8.5px;letter-spacing:-.4px}}
+span.dot{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+/* o botão + nunca cobre o fim da tela */
+main{padding-bottom:110px}
+@media (max-width:820px){main{padding-bottom:calc(var(--nav-h) + 96px + env(safe-area-inset-bottom,0px))}}
 </style>
 
 <header class="top">
@@ -1329,7 +1333,7 @@ function viewLanc(){
     const bar=`<div class="btnrow" style="margin:4px 0 8px"><button class="btn" data-act="lselmodo">${S.lsel?'Cancelar seleção':'Classificar várias'}</button>${S.lsel?`<button class="btn ghost" data-act="lselall">Marcar todas</button>`:''}</div>
       ${S.lsel?`<div class="atencao grid" style="gap:6px"><b>${nsel} marcada${nsel===1?'':'s'}</b><div class="frow"><label class="f">Categoria<select class="i" id="lbCat"><option value="">Não mudar</option>${catOpts('')}</select></label>${fx.length?`<label class="f">Faz parte de<select class="i" id="lbFixo"><option value="">Não mudar</option>${fx.map(d=>`<option value="${esc(d.id)}">${esc(d.desc)} (${esc(d.cardNome)})</option>`).join('')}<option value="-">Nenhuma (compra à parte)</option></select></label>`:''}</div><div><button class="btn pri" data-act="lbulk">Aplicar nas marcadas</button></div></div>`:''}`;
     out+=sec('Compras nos cartões',sum(L,({x})=>x.valor),'var(--out)',L.map(({x,k})=>rowCompra(x,k)).join(''),bar); }
-  if(['tudo','gastos','cartao'].includes(f)&&!q) out+=faturasSec(M,c)+tercCard(M,c);
+  if(['tudo','gastos','cartao'].includes(f)&&!q) out+=faturasSec(M,c)+`<section class="card"><div class="sechead"><h2>Próximos meses</h2><span class="small muted">faturas já previstas</span></div>${miniProj(M)}</section>`+tercCard(M,c);
   if(f==='fixas'){ const rec=c.ent.filter(d=>d.recorrente).concat(c.des.filter(d=>d.recorrente)).filter(d=>ok(d.desc,catOf(d)));
     const sub=lancCompras(M).filter(({x})=>x.recorrente&&ok(x.desc));
     out+=sec('Salário e contas fixas',sum(rec.filter(d=>d.tipo!=='entrada'),x=>x.cardNome?x.estimado:x.v),'',rec.map(rowLanc).join(''),'<p class="small muted" style="margin:0 0 6px">Tudo o que se repete todo mês. Toque para mudar só neste mês ou daqui em diante.</p>');
@@ -1407,6 +1411,7 @@ function mesResumo(M){
   ${vencCard(M)}
   ${sugFixoHtml(M)}
   ${tercCard(M,calc(M))}
+  ${projHtml(M)}
   <section class="card"><div class="sechead"><h2>Pontos de atenção</h2><span class="small muted">${al.length?al.length+(al.length>1?' itens':' item'):''}</span></div>
     <div class="alerts">${(S.alAll?al:al.slice(0,3)).map(a=>`<button class="al ${a.n}" ${a.pat?'data-act="gopat"':a.cat?`data-act="opencat" data-cat="${esc(a.cat)}"`:a.card?`data-act="opencard" data-id="${esc(a.card)}"`:a.grupo?`data-act="opengrupo" data-g="${esc(a.grupo)}"`:''}><span class="ic" aria-hidden="true">${a.n==='bad'?'!':a.n==='warn'?'?':'i'}</span><b>${esc(a.t)}</b><span class="d">${esc(a.d)}</span></button>`).join('')||`<div class="al ok"><span class="ic">✓</span><b>Tudo dentro do plano</b><span class="d">Nenhum grupo acima do limite neste mês.</span></div>`}</div>${al.length>3?`<button class="btn ghost" data-act="alall">${S.alAll?'Mostrar menos':'Ver mais '+(al.length-3)}</button>`:''}</section>
   <section class="card grid"><div class="sechead"><h2>Seu plano neste mês</h2><span class="small muted">100% = ${brl(P.base)} de entradas</span></div>
@@ -1470,6 +1475,35 @@ function cardReport(M,k){
 // diferença entre a soma dos lançamentos de hoje e o total da fatura conferida (mudou algo à mão depois da conferência?)
 function confDif(k){ const c=k.conf; if(!c||c.previsao||typeof c.totalPdf!=='number') return 0; const base=c.adiantado>0.005||c.pagoAntes>0.005?(+c.aPagar||c.totalPdf):c.totalPdf; const d=r2(k.total-base); return Math.abs(d)>=0.01?d:0; }
 function confChip(k){ if(!k.conf) return k.itens.length?'<span class="chip">a conferir</span>':''; const d=confDif(k); if(d) return `<span class="chip bad">conferida · lançamentos ${d>0?'acima':'abaixo'} da fatura em ${brl(Math.abs(d))}</span>`; return k.conf.pendencias?`<span class="chip warn">conferida · ${k.conf.pendencias} pendência(s)</span>`:'<span class="chip ok">conferida ✓</span>'; }
+// Início: o que já está previsto nos próximos meses (contas e faturas), para ver o que vem pela frente
+function projHtml(M){ const ms=[1,2,3,4,5,6].map(k=>addM(M,k)); const D=ms.map(m=>{ const c=calc(m); return {m,contas:r2(c.totDes),cart:r2(c.totCard),ent:r2(c.totEnt+c.totReemb)}; });
+  const mx=Math.max(1,...D.map(d=>d.contas+d.cart),...D.map(d=>d.ent));
+  return `<section class="card grid"><div class="sechead"><h2>Próximos meses</h2><span class="small muted">o que já está previsto</span></div>
+  <div class="small muted" style="display:flex;gap:14px;flex-wrap:wrap"><span><span class="dot" style="background:var(--accent)"></span> contas</span><span><span class="dot" style="background:var(--out)"></span> cartões (parcelas e assinaturas)</span><span>▏ entradas previstas</span></div>
+  <div class="rows">${D.map(d=>{ const g=d.contas+d.cart; return `<div class="prow"><span class="small">${esc(mShort(d.m))}</span><span class="stack" style="height:10px;position:relative" role="img" aria-label="${esc(mShort(d.m))}: contas ${brl(d.contas)}, cartões ${brl(d.cart)}, entradas ${brl(d.ent)}"><span style="width:${d.contas/mx*100}%;background:var(--accent)"></span><span style="width:${d.cart/mx*100}%;background:var(--out);opacity:.8"></span>${d.ent?`<i style="position:absolute;left:calc(${Math.min(100,d.ent/mx*100)}% - 1px);top:-3px;bottom:-3px;width:2px;background:var(--ink)"></i>`:''}</span><span class="small num" style="font-weight:600;text-align:right">${brl(g)}<div class="muted" style="font-weight:400">cartões ${brl(d.cart)}</div>${d.ent?`<div class="muted" style="font-weight:400">sobra ${brl(d.ent-g)}</div>`:''}</span></div>`; }).join('')}</div>
+  <p class="small muted" style="margin:0">Conta só o que já está lançado ou se repete (contas fixas, financiamentos, parcelas e assinaturas). Compras novas ainda não estão aqui.</p></section>`; }
+// Cartão: as próximas faturas deste cartão e quando acabam as parcelas
+function projCard(M,k){ const ms=Array.from({length:12},(_,i)=>addM(M,i+1));
+  const D=ms.map(m=>{ const it=comprasDoMes(m,k.id); const parc=r2(sum(it.filter(x=>+x.nTotal>1),x=>x.valor)), rec=r2(sum(it.filter(x=>x.recorrente),x=>x.valor)), out=r2(sum(it.filter(x=>!(+x.nTotal>1)&&!x.recorrente),x=>x.valor)); return {m,parc,rec,out,tot:r2(parc+rec+out)}; });
+  if(!D.some(d=>d.tot)) return `<section class="card"><div class="sechead"><h2>Próximas faturas</h2></div><div class="empty">Nada previsto para os próximos meses neste cartão.</div></section>`;
+  const mx=Math.max(1,...D.map(d=>d.tot)); const ult=[...D].reverse().find(d=>d.parc>0.005);
+  const fins=comprasDoMes(addM(M,1),k.id).filter(x=>+x.nTotal>1).map(x=>({d:x.desc,fim:addM(addM(M,1),x.nTotal-x.k),v:x.valor})).sort((a,b)=>diffM(b.fim,a.fim));
+  return `<section class="card grid"><div class="sechead"><h2>Próximas faturas</h2><span class="small muted">o que já está previsto</span></div>
+  <div class="rows">${D.map(d=>`<div class="prow"><span class="small">${esc(mShort(d.m))}</span><span class="stack" style="height:10px" role="img" aria-label="${esc(mShort(d.m))}: ${brl(d.tot)}"><span style="width:${d.parc/mx*100}%;background:var(--out);opacity:.85"></span><span style="width:${d.rec/mx*100}%;background:var(--third)"></span><span style="width:${d.out/mx*100}%;background:var(--accent)"></span></span><span class="small num" style="font-weight:600">${brl(d.tot)}</span></div>`).join('')}</div>
+  <div class="small muted" style="display:flex;gap:14px;flex-wrap:wrap"><span><span class="dot" style="background:var(--out)"></span> parcelas</span><span><span class="dot" style="background:var(--third)"></span> assinaturas</span><span><span class="dot" style="background:var(--accent)"></span> outras já lançadas</span></div>
+  <p class="small" style="margin:0">${ult?`Sem compras novas, as parcelas deste cartão acabam em <b>${esc(mLabel(ult.m))}</b>.`:'Não há parcelas para os próximos meses.'}${D[D.length-1].rec?` As assinaturas (${brl(D[D.length-1].rec)} por mês) continuam.`:''}</p>
+  ${fins.length?`<details class="small"><summary>Quando acaba cada parcelamento</summary><div class="rows" style="margin-top:6px">${fins.map(f=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><span class="d">${esc(f.d)} · ${brl(f.v)}/mês</span><span class="v">até ${esc(mShort(f.fim))}</span></div>`).join('')}</div></details>`:''}</section>`; }
+// Cartões: total previsto de TODOS os cartões nos próximos meses, com a parte de cada um
+const COR_CARD=['var(--out)','var(--accent)','var(--third)','var(--warn)','var(--in)','var(--muted)'];
+function projCartoes(M,cards){ const ms=Array.from({length:6},(_,i)=>addM(M,i+1));
+  const D=ms.map(m=>{ const c=calc(m); const por=cards.map(k=>{ const x=c.cards.find(y=>y.id===k.id); return r2(x?x.total:0); }); return {m,por,tot:r2(c.totCard)}; });
+  if(!D.some(d=>d.tot>0.005)) return `<section class="card"><div class="sechead"><h2>Faturas previstas</h2><span class="small muted">todos os cartões</span></div><div class="empty">Nenhuma fatura prevista para os próximos meses.</div></section>`;
+  const mx=Math.max(1,...D.map(d=>d.tot)); const cor=i=>COR_CARD[i%COR_CARD.length];
+  const ult=[...D].reverse().find(d=>d.tot>0.005);
+  return `<section class="card grid" id="projCartoes"><div class="sechead"><h2>Faturas previstas</h2><span class="small muted">todos os cartões</span></div>
+  <div class="rows">${D.map(d=>`<div class="prow"><span class="small">${esc(mShort(d.m))}</span><span class="stack" style="height:10px" role="img" aria-label="${esc(mShort(d.m))}: ${cards.map((k,i)=>esc(k.nome)+' '+brl(d.por[i])).join(', ')}">${d.por.map((v,i)=>v>0?`<span style="width:${v/mx*100}%;background:${cor(i)}"></span>`:'').join('')}</span><span class="small num" style="font-weight:600">${brl(d.tot)}</span></div>`).join('')}</div>
+  <div class="small muted" style="display:flex;gap:14px;flex-wrap:wrap">${cards.map((k,i)=>`<span><span class="dot" style="background:${cor(i)}"></span> ${esc(k.nome)}</span>`).join('')}</div>
+  <p class="small muted" style="margin:0">Soma do que já está lançado nos cartões: parcelas, assinaturas e compras já colocadas nos próximos meses. Compras novas ainda não estão aqui.${ult&&ult.m!==D[D.length-1].m?` Sem compras novas, os cartões zeram depois de <b>${esc(mLabel(ult.m))}</b>.`:''} O detalhe de cada cartão está logo abaixo.</p></section>`; }
 function miniProj(M){
   const ms=[1,2,3,4,5,6].map(k=>addM(M,k)); const vals=ms.map(m=>calc(m).totCard); const mx=Math.max(...vals,1);
   return `<div class="rows">${ms.map((m,i)=>`<div class="prow"><span class="small">${mShort(m)}</span><span class="stack" style="height:8px"><span style="width:${vals[i]/mx*100}%;background:var(--out);opacity:.75"></span></span><span class="small num" style="font-weight:600">${brl(vals[i])}</span></div>`).join('')}</div>`;
@@ -1548,6 +1582,7 @@ function viewCartoes(){
   const items=k.itens.slice().sort((a,b)=>((+b.nTotal>1)-(+a.nTotal>1))||b.valor-a.valor);
   const filt=S.quemFilter?items.filter(x=>x.quem===S.quemFilter):items;
   return `<div class="grid">
+  ${projCartoes(M,cards)}
   <div class="cardpick">${cards.map(x=>`<button data-act="pickcard" data-id="${esc(x.id)}" aria-pressed="${x.id===S.card}"><div class="n">${esc(x.nome)}</div><div class="t">${brl(x.total)}</div></button>`).join('')}</div>
   <section class="card grid">
     <div class="sechead"><h2>${esc(k.nome)}</h2><span class="muted small">fatura de ${mLabel(M)}</span>${confChip(k)}
@@ -1576,7 +1611,7 @@ function viewCartoes(){
       return `<button class="row" data-act="editcompra" data-id="${esc(x.id)}" data-k="${esc(x.k)}"><span class="d">${esc(x.desc)}</span><span class="v" ${x.valor<0?'style="color:var(--in)"':''}>${brl(x.valor)}</span>
       <span class="sub">${x.data?`<span>${esc(x.data)}</span>`:''}${parc}${x.antecipada?'<span class="chip warn">paga adiantada</span>':''}${cf}${x.fixoDe?`<span class="chip ok">dentro do fixo: ${esc(x.fixoDe)}</span>`:x.fixoSug&&!x.fixo?`<span class="chip warn">parece de: ${esc(x.fixoSugDesc)}?</span>`:''}${x.descFat&&normDesc(x.descFat)!==normDesc(x.desc)?`<span class="chip">na fatura: ${esc(x.descFat)}</span>`:''}<span class="chip ${x.quem?'third':''}">${esc(quemLabel(x.quem))}</span><span class="chip">${esc(catOf(x))}</span></span>
       <span class="v2">${n>1&&rest>1&&!x.antecipada?'faltam '+brl(restante(x,M)):''}</span></button>`}).join('')||`<div class="empty">Nada previsto neste cartão em ${mLabel(M)}. Adicione uma compra ou confira a fatura em PDF.</div>`}</div>
-  </section>${(d=>d?`<section class="card atencao grid" style="gap:6px"><b>Os lançamentos mudaram depois da conferência</b><span>Hoje a soma das compras deste cartão é <b>${brl(k.total)}</b>; a fatura conferida tinha <b>${brl(k.total-d)}</b> (diferença de ${brl(Math.abs(d))}). O mês conta a soma dos lançamentos. Se a mudança foi de propósito (ex.: compra que é da próxima fatura), passe-a para o mês seguinte; se não, confira o que foi alterado.</span></section>`:'')(confDif(k))}${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
+  </section>${(d=>d?`<section class="card atencao grid" style="gap:6px"><b>Os lançamentos mudaram depois da conferência</b><span>Hoje a soma das compras deste cartão é <b>${brl(k.total)}</b>; a fatura conferida tinha <b>${brl(k.total-d)}</b> (diferença de ${brl(Math.abs(d))}). O mês conta a soma dos lançamentos. Se a mudança foi de propósito (ex.: compra que é da próxima fatura), passe-a para o mês seguinte; se não, confira o que foi alterado.</span></section>`:'')(confDif(k))}${projCard(M,k)}${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
 }
 
 /* ---------- Conferir fatura ---------- */
