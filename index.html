@@ -591,7 +591,7 @@ const POLITICA=`<p style="margin:0"><b>1. Quem trata os dados.</b> Você mesmo. 
 <p style="margin:0"><b>5. Compartilhamento.</b> Nenhum. Backups são criptografados e só saem do aparelho por ação sua. O backup no Google Drive é opcional e usa a sua conta.</p>
 <p style="margin:0"><b>6. Seus direitos (art. 18).</b> Acessar e exportar (backup e Excel), corrigir, apagar tudo e revogar este consentimento a qualquer momento em Ajustes → Segurança e privacidade.</p>
 <p style="margin:0"><b>7. Retenção.</b> Os dados ficam enquanto você quiser. Ao apagar, somem do aparelho; backups que você guardou ficam sob seu controle.</p>`;
-const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.0';
+const APP='Saldo Certo', AUTORA='Cleirton Monte', VERSAO='4.1';
 const LOGO_SVG='<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#0B6B4E"/><circle cx="32" cy="33" r="18" fill="none" stroke="#fff" stroke-width="4.5" opacity=".35"/><path d="M20 34l8.5 8.5L42 26" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 19l-10.5 2.5 8 8z" fill="#fff"/></svg>';
 const TABS=[['mes','Mês','<path d="M4 5h16v15H4zM4 9h16M9 3v4M15 3v4"/>'],['ano','Ano','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['cartoes','Cartões','<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h4"/>'],['importar','Faturas','<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 18v-7M9 14l3-3 3 3"/>'],['patrimonio','Patrimônio','<path d="M1.5 12L8 6.5l6.5 5.5M3.5 10.5V20h9v-9.5M6.5 20v-4h3v4"/><circle cx="18.5" cy="15.5" r="4"/><path d="M18.5 13.3v4.4M17.2 14.3h2.1a.8.8 0 010 1.6h-1.6a.8.8 0 000 1.6h2.1"/>'],['ajustes','Ajustes','<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>']];
 const NAV=['mes','ano','cartoes','importar','patrimonio'];
@@ -725,7 +725,7 @@ function calc(M){
   for(const l of S.lanc){const v=valorLanc(l,M); if(v==null) continue; (l.tipo==='entrada'?ent:ehInv(l)?inv:des).push({...l,v,previsto:v});}
   // parcelas de financiamentos/empréstimos cadastrados no Patrimônio viram contas fixas do mês
   for(const a of S.ativos){ if(a.classe!=='divida'||!(+a.parcela>0)||!a.refMes||!(+a.nParc>0)) continue; const k=diffM(a.refMes,M); if(k<0||k>=+a.nParc) continue;
-    des.push({id:'div_'+a.id,ativoId:a.id,virtual:true,tipo:'despesa',desc:'Parcela '+(a.nome||a.tipo),v:+a.parcela,previsto:+a.parcela,valor:+a.parcela,grupo:'Fixo',cat:'Financiamentos',recorrente:true,mes:a.refMes,dia:+a.dia||0,forma:a.forma||'',restam:+a.nParc-k}); }
+    des.push({id:'div_'+a.id,ativoId:a.id,virtual:true,tipo:'despesa',desc:'Parcela '+(a.nome||a.tipo),...(pv=>({v:pv,previsto:pv,valor:pv}))(a.parcAntes&&YM.test(a.parcAntes.ate||'')&&diffM(M,a.parcAntes.ate)>=0?+a.parcAntes.valor:+a.parcela),grupo:'Fixo',cat:'Financiamentos',recorrente:true,mes:a.refMes,dia:+a.dia||0,forma:a.forma||'',restam:+a.nParc-k}); }
   // aportes, resgates e amortizações registrados no Patrimônio
   let aport=0,resg=0,amortMov=0; const movs=[];
   for(const a of S.ativos) for(const m of a.movs||[]) if(m.mes===M){ movs.push({...m,nome:a.nome||a.tipo,ativoId:a.id}); if(m.tipo==='aporte') aport+=+m.valor; else if(m.tipo==='resgate') resg+=+m.valor; else if(m.tipo==='amortizacao') amortMov+=+m.valor; }
@@ -763,7 +763,8 @@ function calc(M){
   const totEnt=sum(ent,x=>x.v), totReemb=0; // contas dos outros não entram nas suas entradas
   const totDes=sum(des.filter(d=>!d.movido),x=>x.v), totCard=sum(cards.filter(k=>!k.movido),c=>c.conta), totAtras=r2(sum(atras,a=>a.valor)), totMovido=r2(sum(des.filter(d=>d.movido),x=>x.v)+sum(cards.filter(k=>k.movido),c=>c.conta));
   const totInv=r2(sum(inv.filter(x=>x.grupo==='Investimento'),x=>x.v)+aport-resg), totAmort=r2(sum(inv.filter(x=>x.grupo==='Amortização'),x=>x.v)+amortMov);
-  const r={ent,des,inv,movs,cards,terceiros,tercInfo,atras,totEnt,totReemb,totDes,totCard,totAtras,totMovido,totInv,totAmort,aport,resg,saldo:r2(totEnt+totReemb-totDes-totCard-totAtras-totInv-totAmort)};
+  const totTerc=r2(sum(Object.values(terceiros).filter(v=>v>0)));
+  const r={ent,des,inv,movs,cards,terceiros,tercInfo,totTerc,atras,totEnt,totReemb,totDes,totCard,totAtras,totMovido,totInv,totAmort,aport,resg,saldo:r2(totEnt+totReemb-totDes-totCard-totAtras-totInv-totAmort)};
   memo.set(mk,r); return r;
 }
 function gastos(M){
@@ -852,7 +853,7 @@ function viewPatrimonio(){
   </div>
   ${P.div?`<div class="stack" aria-hidden="true"><span style="width:${Math.min(100,P.liq>0?P.liq/(P.inv+P.bem)*100:0)}%;background:var(--in)"></span><span style="width:${Math.min(100,P.div/Math.max(1,P.inv+P.bem)*100)}%;background:var(--out)"></span></div><div class="legend"><span><i style="background:var(--in)"></i>É seu de verdade</span><span><i style="background:var(--out)"></i>Ainda é do banco</span></div>`:''}
   <p class="small muted" style="margin:0">Dinheiro guardado rendeu ${rend>=0?'+':''}${brl(rend)}${apl?' ('+(rend/apl*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% sobre o aplicado)':''}.</p></div>
-  <div class="btnrow"><button class="btn pri" data-act="movnovo">Aporte ou resgate</button><button class="btn" data-act="saldos">Atualizar saldos</button><button class="btn" data-act="ativonovo" data-c="invest">+ Investimento</button><button class="btn" data-act="ativonovo" data-c="bem">+ Bem ou dívida</button></div>
+  <div class="btnrow"><button class="btn pri" data-act="movnovo">Aporte ou resgate</button><button class="btn" data-act="saldos">Atualizar saldos</button>${dividas().length?'<button class="btn" data-act="amortnovo">Amortizar financiamento</button>':''}<button class="btn" data-act="ativonovo" data-c="invest">+ Investimento</button><button class="btn" data-act="ativonovo" data-c="bem">+ Bem ou dívida</button></div>
   <div class="cols"><div class="grid">
     ${inv.length?`<section class="card"><div class="sechead"><h2>Investimentos</h2><span class="sum">${brl(P.inv)}</span></div><div class="rows">${inv.sort((a,b)=>valAtivo(b,now)-valAtivo(a,now)).map(rowA).join('')}</div></section>`:''}
     ${bens.length||divs.length?`<section class="card"><div class="sechead"><h2>Bens e dívidas</h2><span class="sum">${brl(P.bem-P.div)}</span></div><div class="rows">${[...bens,...divs].map(rowA).join('')}</div></section>`:''}
@@ -885,7 +886,7 @@ function sheetAtivo(id,classe){
       <div class="frow"><label class="f">Como paga<select class="i" name="forma"><option value="">Não informado</option>${Object.entries(FORMAS).map(([k,l])=>`<option value="${k}" ${d.forma===k?'selected':''}>${l}</option>`).join('')}</select></label><label class="f">Juros<input class="i" name="taxa" value="${esc(d.taxa)}" placeholder="Ex.: 9,5% ao ano"></label></div>
       <p class="small muted" style="margin:0">A parcela entra sozinha nas contas de cada mês até acabar.</p>`:''}`}
     <button class="btn pri big" type="submit">Salvar</button>
-  </form>${a&&isDiv?`<div class="grid" style="gap:8px"><div class="eyebrow">Pagou um valor extra para abater a dívida?</div><div class="frow"><label class="f">Valor da amortização<input class="i num" id="amortV" inputmode="numeric" data-money placeholder="R$ 0,00"></label><div style="align-self:end"><button class="btn" data-act="amortizar">Registrar amortização</button></div></div></div>`:''}
+  </form>${a&&isDiv?`<div class="grid" style="gap:8px"><div class="eyebrow">Pagou um valor extra para abater a dívida?</div><div><button class="btn" data-act="amortnovo" data-id="${esc(a.id)}">Registrar amortização</button></div></div>`:''}
   ${a?`<button class="btn danger" data-act="ativodelask">Apagar</button><div id="delConfirm"></div>`:''}
   ${dl('dlTipo',TIPOS[classe])}${dl('dlInst',INSTS)}${dl('dlObj',OBJS)}${dl('dlLiq',LIQ)}`);
 }
@@ -900,6 +901,25 @@ function sheetSoTotal(){
     <p class="small muted" style="margin:0" id="soTotPrev"></p>
     <button class="btn pri big" type="submit">Lançar o total</button>
   </form>`);
+}
+const dividas=()=>S.ativos.filter(a=>a.classe==='divida');
+function sheetAmort(id,valor){
+  const ds=dividas(); if(!ds.length){ toast('Cadastre o financiamento primeiro'); sheetAtivo(null,'divida'); return; }
+  const a=ds.find(x=>x.id===id)||ds[0], now=ymNow(), pagoEste=!!(S.pagos[now]||{})['l_div_'+a.id];
+  S.sheetCtx={kind:'amort'};
+  openSheet(`<div class="sh"><h2>Amortizar financiamento</h2><button class="x" data-act="closesheet" aria-label="Fechar">✕</button></div>
+  <form id="fAmort" class="grid">
+    <label class="f">Qual financiamento?<select class="i" name="ativo" id="amortAtivo">${ds.map(d=>`<option value="${esc(d.id)}" ${d.id===a.id?'selected':''}>${esc(d.nome||d.tipo)}${d.inst?' · '+esc(d.inst):''} · saldo ${brl(valAtivo(d,now))}</option>`).join('')}</select></label>
+    <div class="frow"><label class="f">Valor que você pagou na amortização<input class="i num" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" value="${valor?esc(String(valor).replace('.',',')):''}" required></label>
+    <label class="f">Mês do pagamento<input class="i" type="month" name="mes" value="${esc(now)}"></label></div>
+    <div class="hint small">A amortização pode diminuir várias parcelas de uma vez ou o valor da parcela, e isso depende do dia e das regras do banco. Por isso o app não calcula: <b>copie do app ou do extrato do banco</b> como ficou depois de amortizar.</div>
+    <div class="frow"><label class="f">Parcelas que faltam agora<input class="i num" name="nParc" inputmode="numeric" value="${esc(String(restParc(a,pagoEste?addM(now,1):now)||''))}" required></label>
+    <label class="f">A próxima parcela vence em<input class="i" type="month" name="prox" value="${esc(pagoEste?addM(now,1):now)}"></label></div>
+    <div class="frow"><label class="f">Novo saldo devedor<input class="i num" name="saldo" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>
+    <label class="f">Valor da parcela agora<input class="i num" name="parcela" inputmode="numeric" data-money placeholder="R$ 0,00" value="${esc(String(+a.parcela||'').replace('.',','))}"></label></div>
+    <p class="small muted" style="margin:0" id="amortAntes">Antes: ${restParc(a,now)?'faltavam '+restParc(a,now)+' parcelas de '+brl(+a.parcela||0)+' · ':''}saldo devedor ${brl(valAtivo(a,now))}.</p>
+    <p class="small muted" style="margin:0">O valor pago conta como poupança (amortização) no plano do mês.</p>
+    <button class="btn pri big" type="submit">Registrar amortização</button></form>`);
 }
 function sheetMov(){
   const inv=S.ativos.filter(a=>a.classe==='invest'); if(!inv.length){ sheetAtivo(null,'invest'); return; }
@@ -1088,7 +1108,7 @@ function kpis(c){
   const saidas=c.totDes+c.totCard+c.totAtras, entradas=c.totEnt+c.totReemb, invt=c.totInv+c.totAmort, base=Math.max(entradas,saidas+Math.max(0,invt),1);
   return `<div class="summary">
     <div class="kpis">
-      <div class="kpi in"><div class="eyebrow">Entradas</div><div class="v">${brl(entradas)}</div>${c.totReemb?`<div class="small muted">inclui ${brl(c.totReemb)} a receber</div>`:''}</div>
+      <div class="kpi in"><div class="eyebrow">Entradas</div><div class="v">${brl(entradas)}</div>${c.totTerc?`<div class="small muted">+ ${brl(c.totTerc)} a receber de outros</div>`:''}</div>
       <div class="kpi out"><div class="eyebrow">Gastos</div><div class="v">${brl(saidas)}</div><div class="small muted">${brl(c.totDes)} contas · ${brl(c.totCard)} cartões${sum(c.cards,k=>k.naoPago||0)?` (inclui ${brl(sum(c.cards,k=>k.naoPago||0))} que outros não pagaram)`:''}${c.totAtras?` · ${brl(c.totAtras)} de contas atrasadas`:''}${c.totMovido?` · ${brl(c.totMovido)} pagos depois, com atraso`:''}</div></div>
       <button class="kpi inv" data-act="gopat"><div class="eyebrow">Investido</div><div class="v">${brl(invt)}</div><div class="small muted">${invt?'vai para o Patrimônio':'registre em Patrimônio'}</div></button>
       ${Math.abs(c.saldo)<1?`<div class="kpi bal"><div class="eyebrow">Sobra do mês</div><div class="v">${brl(0)}</div><div class="small" style="color:var(--in);font-weight:600">tudo destinado ✓</div></div>`
@@ -1163,7 +1183,8 @@ function mesLanc(M,c){
     </div><div class="grid">
       ${c.inv.length||c.movs.length?`<section class="card"><div class="sechead"><h2>Investido no mês</h2><span class="sum" style="color:var(--third)">${brl(c.totInv+c.totAmort)}</span></div><div class="rows">${c.movs.map(m=>`<button class="row" data-act="ativoedit" data-id="${esc(m.ativoId)}"><span class="d">${m.tipo==='aporte'?'Aporte':m.tipo==='resgate'?'Resgate':'Amortização'}: ${esc(m.nome)}</span><span class="v">${m.tipo==='resgate'?'−':''}${brl(m.valor)}</span></button>`).join('')}${c.inv.map(rowLanc).join('')}</div><p class="small muted" style="margin:6px 0 0">Não entra nos gastos. Fica somado no Patrimônio.</p></section>`:''}
       <section class="card"><div class="sechead"><h2>Faturas do mês</h2><span class="sum" style="color:var(--out)">${brl(c.totCard)}</span></div>
-        <div class="rows">${c.cards.map(k=>`<button class="cardrow" data-act="opencard" data-id="${esc(k.id)}"><span class="plastic" aria-hidden="true"></span><span style="min-width:0"><b>${esc(k.nome)}</b><div class="small muted">${k.itens.length} lançamento${k.itens.length===1?'':'s'}${k.terc?` · ${brl(k.terc)} de terceiros`:''}${k.fixResta?` · + ${brl(k.fixResta)} estimados`:''}</div>${confChip(k)}</span><span class="v">${brl(k.total)}</span></button>`).join('')}</div>
+        ${c.totTerc?`<div class="hint small">Das faturas, <b>${brl(c.totTerc)}</b> são compras de outras pessoas e não saem das suas entradas: ${Object.entries(c.terceiros).filter(([q,v])=>v>0).map(([q,v])=>`${esc(q)} ${brl(v)}`).join(' · ')}. O mês conta só a sua parte; para o banco, a fatura continua cheia.</div>`:''}
+        <div class="rows">${c.cards.map(k=>`<button class="cardrow" data-act="opencard" data-id="${esc(k.id)}"><span class="plastic" aria-hidden="true"></span><span style="min-width:0"><b>${esc(k.nome)}</b><div class="small muted">${k.itens.length} lançamento${k.itens.length===1?'':'s'}${k.fixResta?` · + ${brl(k.fixResta)} estimados`:''}</div>${k.terc?`<div class="small muted">fatura ${brl(k.aPagar)} · ${brl(k.terc)} de outros${k.naoPago?` (${brl(k.naoPago)} não pagos, contam como seus)`:' (a receber)'}</div>`:''}${confChip(k)}</span><span class="v">${brl(k.terc?k.conta:k.total)}${k.terc?'<div class="small muted" style="font-weight:500">sua parte</div>':''}</span></button>`).join('')}</div>
       </section>
       <section class="card"><div class="sechead"><h2>Próximos meses</h2><span class="small muted">faturas já previstas</span></div>${miniProj(M)}</section>
     </div></div>`;
@@ -1273,8 +1294,8 @@ function viewCartoes(){
     ${S.undoAsk===k.id+'_'+M?`<div class="confirm"><b>Desfazer a conferência de ${esc(mLabel(M))}?</b><span class="small">Apaga as ${k.conf.desfazer.criados.length} compras que vieram do PDF e volta as compras alteradas como estavam.</span><div class="btnrow"><button class="btn danger" data-act="undodo" data-k="${esc(k.id+'_'+M)}">Desfazer</button><button class="btn" data-act="undono">Cancelar</button></div></div>`:''}
     <div class="minis">
       <div class="mini"><div class="eyebrow">${k.conf&&!k.conf.previsao?'Fatura a pagar':'Fatura prevista'}</div><div class="v">${brl(k.aPagar)}</div>${k.conf&&!k.conf.previsao?`<div class="small muted">${k.adiantado?`compras ${brl(k.total)} · ${brl(k.adiantado)} já pagos antes`:k.conf.totalPdf!=null?(Math.abs(k.conf.totalPdf-k.total)<=0.05?'igual ao PDF ✓':'PDF: '+brl(k.conf.totalPdf)):'PDF sem total'}</div>`:''}</div>
-      <div class="mini"><div class="eyebrow">Minha parte</div><div class="v">${brl(k.nosso)}</div></div>
-      <div class="mini"><div class="eyebrow">Pagadores</div><div class="v" style="color:var(--third)">${brl(k.terc)}</div></div>
+      <div class="mini"><div class="eyebrow">Minha parte</div><div class="v">${brl(k.conta)}</div><div class="small muted">é o que sai das suas entradas${k.naoPago?` · inclui ${brl(k.naoPago)} que outros não pagaram`:''}</div></div>
+      <div class="mini"><div class="eyebrow">De outros (a receber)</div><div class="v" style="color:var(--third)">${brl(k.terc)}</div>${k.terc?`<div class="small muted">${Object.entries(k.tercP||{}).map(([q,v])=>esc(q)+' '+brl(v)).join(' · ')}</div>`:''}</div>
       <div class="mini"><div class="eyebrow">Saldo a pagar</div><div class="v">${brl(k.resta)}</div><div class="small muted">com parcelas futuras</div></div>
     </div>
     ${k.abatItens.length?`<div class="hint small grid" style="gap:6px"><b>Contas fixas pagas com este cartão (estimativa): ${brl(k.fixTotal)}</b>${k.abatItens.map(a=>a.conferida
@@ -1541,7 +1562,7 @@ function sheetNovo(tipo='despesa',rec=null){
     :`${tipo==='entrada'?`<div class="chips" role="group" aria-label="Tipo de entrada">${[['Salário',1],['13º salário',0],['Férias',0],['Bônus ou PLR',0],['Renda extra',0]].map(([d,r])=>`<button type="button" class="chip" data-act="entpreset" data-d="${d}" data-r="${r}">${d}</button>`).join('')}</div><p class="small muted" style="margin:0">Férias, 13º e bônus entram só no mês em que chegam e fazem parte dos 100% do plano daquele mês.</p>`:''}
       <div class="frow"><label class="f">Valor<input class="i" name="valor" inputmode="numeric" data-money placeholder="R$ 0,00" required></label>${tipo==='despesa'?`<label class="f">Grupo do plano<select class="i" name="grupo">${grpOptsReq('Fixo')}</select></label>`:''}</div>
       ${tipo==='despesa'?`<label class="f">Categoria<select class="i" name="cat"><option value="">Automática</option>${catOpts('')}</select></label>${cartaoFixoSel('','')}
-      <div class="hint small" id="finHint">É financiamento ou empréstimo (casa, carro, consignado)? <button type="button" class="btn" style="padding:4px 10px;margin-left:4px" data-act="novofin">Lançar como financiamento</button><br><span class="muted">Assim o app sabe quantas parcelas faltam, para de cobrar quando acabar e desconta a dívida do seu patrimônio.</span></div>`:''}
+      <div class="hint small" id="finHint">É financiamento ou empréstimo (casa, carro, consignado)? <button type="button" class="btn" style="padding:4px 10px;margin-left:4px" data-act="novofin">Lançar como financiamento</button><br><span class="muted">Assim o app sabe quantas parcelas faltam, para de cobrar quando acabar e desconta a dívida do seu patrimônio.</span>${dividas().length?`<br>Pagou uma amortização? <button type="button" class="btn" style="padding:4px 10px;margin-top:4px" data-act="amortnovo">Registrar amortização</button>`:''}</div>`:''}
       <div class="frow"><label class="check"><input type="checkbox" name="rec" ${rec?'checked':''}> Repete todo mês</label><label class="f">${tipo==='entrada'?'Dia em que cai (opcional)':'Dia do vencimento (opcional)'}<input class="i num" name="dia" inputmode="numeric" placeholder="ex.: 10"></label></div>`}
     <p class="small muted" style="margin:0">Entra em ${esc(mLabel(S.mes))}${isC?' (mês da fatura)':''}.</p>
     <button class="btn pri big" type="submit">Salvar</button>
@@ -1937,7 +1958,7 @@ function sanitizeBackup(j){
   const historico={}; const hs=j.historico&&typeof j.historico==='object'?j.historico:{}; for(const k of Object.keys(hs)) if(YM.test(k)){ const h=hs[k]||{}; const nm=o=>{const r={}; if(o&&typeof o==='object') for(const kk of Object.keys(o).slice(0,100)) if(!['__proto__','constructor','prototype'].includes(kk)) r[sStr(kk,60)]=sNum(o[kk]); return r}; historico[k]={e:sNum(h.e),s:sNum(h.s),inv:sNum(h.inv),am:sNum(h.am),grupos:nm(h.grupos),cats:nm(h.cats),fechadoEm:sStr(h.fechadoEm,30)}; }
   const conferencias={}; const cf=j.conferencias&&typeof j.conferencias==='object'?j.conferencias:{}; for(const k of Object.keys(cf)) if(SAFE_ID.test(k)){ const x=cf[k]||{}; conferencias[k]={card:sStr(x.card,64),mes:YM.test(x.mes)?x.mes:'',em:sStr(x.em,30),totalPdf:x.totalPdf==null?null:sNum(x.totalPdf),totalApp:sNum(x.totalApp),diferenca:sNum(x.diferenca),pendencias:Math.max(0,parseInt(x.pendencias)||0),resumo:sStr(x.resumo,300),arquivo:sStr(x.arquivo,80)}; }
   const pagos={}; const pg=j.pagos&&typeof j.pagos==='object'?j.pagos:{}; for(const k of Object.keys(pg)) if(YM.test(k)&&pg[k]&&typeof pg[k]==='object'){ const o={}; for(const kk of Object.keys(pg[k]).slice(0,500)) if(SAFE_ID.test(kk)){ const x=pg[k][kk]; o[kk]=x&&typeof x==='object'?(YM.test(x.em||'')?{em:x.em,valor:sNum(x.valor)}:true):!!x; } pagos[k]=o; }
-  const ativos=(Array.isArray(j.ativos)?j.ativos:[]).slice(0,2000).filter(a=>a&&['invest','bem','divida'].includes(a.classe)).map(a=>({id:SAFE_ID.test(a.id)?a.id:uid('a'),classe:a.classe,tipo:sStr(a.tipo,60),nome:sStr(a.nome,100),inst:sStr(a.inst,60),qtd:a.qtd==null||a.qtd===''?'':sNum(a.qtd),aplicado:sNum(a.aplicado),atual:sNum(a.atual),taxa:sStr(a.taxa,40),venc:/^\d{4}-\d{2}(-\d{2})?$/.test(a.venc||'')?a.venc:'',liquidez:sStr(a.liquidez,40),objetivo:sStr(a.objetivo,60),parcela:sNum(a.parcela),estimar:!!a.estimar,nParc:Math.max(0,Math.min(600,parseInt(a.nParc)||0)),refMes:YM.test(a.refMes||'')?a.refMes:'',dia:Math.max(0,Math.min(31,parseInt(a.dia)||0)),forma:['pix','boleto','debito','dinheiro'].includes(a.forma)?a.forma:'',hist:sYMmap(a.hist,sNum),movs:(Array.isArray(a.movs)?a.movs:[]).slice(-300).filter(m=>m&&YM.test(m.mes)).map(m=>({mes:m.mes,tipo:['resgate','amortizacao'].includes(m.tipo)?m.tipo:'aporte',valor:sNum(m.valor)}))}));
+  const ativos=(Array.isArray(j.ativos)?j.ativos:[]).slice(0,2000).filter(a=>a&&['invest','bem','divida'].includes(a.classe)).map(a=>({id:SAFE_ID.test(a.id)?a.id:uid('a'),classe:a.classe,tipo:sStr(a.tipo,60),nome:sStr(a.nome,100),inst:sStr(a.inst,60),qtd:a.qtd==null||a.qtd===''?'':sNum(a.qtd),aplicado:sNum(a.aplicado),atual:sNum(a.atual),taxa:sStr(a.taxa,40),venc:/^\d{4}-\d{2}(-\d{2})?$/.test(a.venc||'')?a.venc:'',liquidez:sStr(a.liquidez,40),objetivo:sStr(a.objetivo,60),parcela:sNum(a.parcela),estimar:!!a.estimar,nParc:Math.max(0,Math.min(600,parseInt(a.nParc)||0)),refMes:YM.test(a.refMes||'')?a.refMes:'',dia:Math.max(0,Math.min(31,parseInt(a.dia)||0)),forma:['pix','boleto','debito','dinheiro'].includes(a.forma)?a.forma:'',hist:sYMmap(a.hist,sNum),movs:(Array.isArray(a.movs)?a.movs:[]).slice(-300).filter(m=>m&&YM.test(m.mes)).map(m=>({mes:m.mes,tipo:['resgate','amortizacao'].includes(m.tipo)?m.tipo:'aporte',valor:sNum(m.valor),...(m.tipo==='amortizacao'&&m.nParcDepois!=null?{nParcDepois:Math.max(0,Math.min(600,parseInt(m.nParcDepois)||0)),saldoDepois:sNum(m.saldoDepois)}:{})})),...(a.parcAntes&&YM.test(a.parcAntes.ate||'')?{parcAntes:{ate:a.parcAntes.ate,valor:sNum(a.parcAntes.valor)}}:{})}));
   return {config,lanc,compras,historico,conferencias,pagos,ativos,exportado:sStr(j.exportado,30)};
 }
 async function readBackupText(txt){
@@ -2168,6 +2189,7 @@ document.addEventListener('click',async e=>{
     case 'ativoedit': sheetAtivo(t.dataset.id); break;
     case 'movnovo': sheetMov(); break;
     case 'saldos': sheetSaldos(); break;
+    case 'amortnovo': sheetAmort(t.dataset.id||'', t.dataset.v||''); break;
     case 'amortizar': { const a=S.ativos.find(x=>x.id===S.sheetCtx.id); const v=Math.abs(num($('#amortV').value)); if(!a||!v){ toast('Digite o valor'); return; } const o=strip(clone(a)); const now=ymNow(); o.atual=r2(Math.max(0,(+o.atual||0)-v)); o.hist=Object.assign({},o.hist||{},{[now]:o.atual}); o.movs=[...(o.movs||[]),{mes:now,tipo:'amortizacao',valor:v}].slice(-300); await put('ativos',a.id,o); closeSheet(); toast('Amortização registrada: conta como poupança no plano'); break; }
     case 'ativodelask': $('#delConfirm').innerHTML=`<div class="confirm"><b>Apagar este item do patrimônio?</b><div class="btnrow"><button class="btn danger" data-act="ativodel">Apagar</button></div></div>`; break;
     case 'ativodel': await del('ativos',S.sheetCtx.id); closeSheet(); toast('Apagado'); break;
@@ -2304,6 +2326,17 @@ document.addEventListener('submit',async e=>{
     const criados=[]; if(dif>0.009){ const nid=uid('c'); criados.push(nid); await put('compras',nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:dif,mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}); }
     await put('conferencias',card+'_'+M,{card,mes:M,em:new Date().toISOString(),totalPdf:tot,totalApp:tot,diferenca:0,pendencias:0,soTotal:true,resumo:'Só o total da fatura'+(outros?`: ${brl(outros)} já lançados + ${brl(Math.max(0,dif))} não detalhados`:''),desfazer:{criados,antes:[]}});
     closeSheet(); S.card=card; S.mes=M; location.hash='#cartoes'; toast(`Fatura ${cardName(card)} de ${mLabel(M)}: ${brl(tot)}`);
+  } else if(f.id==='fAmort'){
+    const a=S.ativos.find(x=>x.id===fd.get('ativo')&&x.classe==='divida'); const v=Math.abs(num(fd.get('valor'))), sd=Math.abs(num(fd.get('saldo'))), np=parseInt(fd.get('nParc'));
+    const mes=YM.test(String(fd.get('mes')||''))?fd.get('mes'):ymNow(), prox=YM.test(String(fd.get('prox')||''))?fd.get('prox'):mes, pc=num(fd.get('parcela'));
+    if(!a||!v){ toast('Digite o valor da amortização'); return; } if(!(np>=0)||String(fd.get('saldo')||'').trim()===''){ toast('Informe as parcelas que faltam e o novo saldo devedor (veja no app do banco)'); return; }
+    const o=strip(clone(a)); o.atual=r2(sd); o.estimar=false; o.hist=Object.assign({},o.hist||{},{[mes]:o.atual});
+    // as parcelas já pagas antes da amortização continuam no histórico: o novo prazo vale a partir da próxima parcela
+    const pagasAntes=a.refMes&&+a.nParc?Math.max(0,diffM(a.refMes,prox)):0; o.nParc=Math.min(600,pagasAntes+Math.max(0,np)); if(pc>0) o.parcela=r2(pc);
+    if(pagasAntes&&+a.parcela!==o.parcela){ o.parcAntes=Object.assign({},o.parcAntes||{},{ate:addM(prox,-1),valor:+a.parcela}); }
+    o.movs=[...(o.movs||[]),{mes,tipo:'amortizacao',valor:v,nParcDepois:np,saldoDepois:o.atual}].slice(-300);
+    await put('ativos',a.id,o); closeSheet();
+    toast(`Amortização de ${brl(v)} registrada. Agora ${np?`faltam ${np} parcela${np>1?'s':''} de ${brl(o.parcela)}`:'o financiamento está quitado'} · saldo devedor ${brl(o.atual)}.`);
   } else if(f.id==='fMov'){
     const a=S.ativos.find(x=>x.id===fd.get('ativo')); const v=Math.abs(num(fd.get('valor'))); const tipo=fd.get('tipo'); if(!a||!v) return;
     await registrarMov(a,tipo,v,YM.test(String(fd.get('mes')||''))?fd.get('mes'):ymNow());

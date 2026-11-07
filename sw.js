@@ -1,6 +1,6 @@
 // Guarda os arquivos do app no celular: ele abre e funciona sem internet. Nenhum dado pessoal passa por aqui.
 // Versão nova só entra quando a pessoa toca em "Atualizar".
-const CACHE='financas-6d0e7cbc7d';
+const CACHE='financas-293fe74262';
 const FILES=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:'reload'})))))});
 self.addEventListener('message',e=>{ if(e.data==='atualizar') self.skipWaiting(); });
