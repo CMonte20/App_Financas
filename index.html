@@ -1467,7 +1467,9 @@ function cardReport(M,k){
     ${cortar?`<p class="small" style="margin:0">Cortando 30% do que está marcado como "dá para cortar", você economiza <b>${brl(cortar*0.3)}</b> por mês (${brl(cortar*0.3*12)} por ano).</p>`:''}
   </section>`;
 }
-function confChip(k){ if(!k.conf) return k.itens.length?'<span class="chip">a conferir</span>':''; return k.conf.pendencias?`<span class="chip warn">conferida · ${k.conf.pendencias} pendência(s)</span>`:'<span class="chip ok">conferida ✓</span>'; }
+// diferença entre a soma dos lançamentos de hoje e o total da fatura conferida (mudou algo à mão depois da conferência?)
+function confDif(k){ const c=k.conf; if(!c||c.previsao||typeof c.totalPdf!=='number') return 0; const base=c.adiantado>0.005||c.pagoAntes>0.005?(+c.aPagar||c.totalPdf):c.totalPdf; const d=r2(k.total-base); return Math.abs(d)>=0.01?d:0; }
+function confChip(k){ if(!k.conf) return k.itens.length?'<span class="chip">a conferir</span>':''; const d=confDif(k); if(d) return `<span class="chip bad">conferida · lançamentos ${d>0?'acima':'abaixo'} da fatura em ${brl(Math.abs(d))}</span>`; return k.conf.pendencias?`<span class="chip warn">conferida · ${k.conf.pendencias} pendência(s)</span>`:'<span class="chip ok">conferida ✓</span>'; }
 function miniProj(M){
   const ms=[1,2,3,4,5,6].map(k=>addM(M,k)); const vals=ms.map(m=>calc(m).totCard); const mx=Math.max(...vals,1);
   return `<div class="rows">${ms.map((m,i)=>`<div class="prow"><span class="small">${mShort(m)}</span><span class="stack" style="height:8px"><span style="width:${vals[i]/mx*100}%;background:var(--out);opacity:.75"></span></span><span class="small num" style="font-weight:600">${brl(vals[i])}</span></div>`).join('')}</div>`;
@@ -1574,7 +1576,7 @@ function viewCartoes(){
       return `<button class="row" data-act="editcompra" data-id="${esc(x.id)}" data-k="${esc(x.k)}"><span class="d">${esc(x.desc)}</span><span class="v" ${x.valor<0?'style="color:var(--in)"':''}>${brl(x.valor)}</span>
       <span class="sub">${x.data?`<span>${esc(x.data)}</span>`:''}${parc}${x.antecipada?'<span class="chip warn">paga adiantada</span>':''}${cf}${x.fixoDe?`<span class="chip ok">dentro do fixo: ${esc(x.fixoDe)}</span>`:x.fixoSug&&!x.fixo?`<span class="chip warn">parece de: ${esc(x.fixoSugDesc)}?</span>`:''}${x.descFat&&normDesc(x.descFat)!==normDesc(x.desc)?`<span class="chip">na fatura: ${esc(x.descFat)}</span>`:''}<span class="chip ${x.quem?'third':''}">${esc(quemLabel(x.quem))}</span><span class="chip">${esc(catOf(x))}</span></span>
       <span class="v2">${n>1&&rest>1&&!x.antecipada?'faltam '+brl(restante(x,M)):''}</span></button>`}).join('')||`<div class="empty">Nada previsto neste cartão em ${mLabel(M)}. Adicione uma compra ou confira a fatura em PDF.</div>`}</div>
-  </section>${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
+  </section>${(d=>d?`<section class="card atencao grid" style="gap:6px"><b>Os lançamentos mudaram depois da conferência</b><span>Hoje a soma das compras deste cartão é <b>${brl(k.total)}</b>; a fatura conferida tinha <b>${brl(k.total-d)}</b> (diferença de ${brl(Math.abs(d))}). O mês conta a soma dos lançamentos. Se a mudança foi de propósito (ex.: compra que é da próxima fatura), passe-a para o mês seguinte; se não, confira o que foi alterado.</span></section>`:'')(confDif(k))}${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
 }
 
 /* ---------- Conferir fatura ---------- */
@@ -1681,7 +1683,8 @@ function viewConciliacao(){
     ${sec('Não entram nesta fatura','','',`<p class="small muted" style="margin:4px 0">Pagamento da fatura anterior: ele quita o mês passado, não é gasto deste mês.</p>`+R.pag.map(r=>`<div class="cr"><span></span><span>${esc(r.desc)}</span><span class="v">${brl(Math.abs(r.valor))}</span></div>`).join(''),R.pag.length,true)}
     ${fixosCard.length&&!prevMode?`<div class="hint small">${fixosCard.map(d=>`<b>${esc(d.desc)}</b> (${brl(d.v)})`).join(', ')} ${fixosCard.length>1?'são estimativas':'é uma estimativa'} de conta fixa paga com este cartão. Depois de aplicar, essa estimativa sai do mês e vale o que veio na fatura.</div>`:''}
     ${!I.rows.length?`<div class="err">Não encontrei lançamentos neste arquivo.${totPdf!=null?' Mas achei o total da fatura: você pode lançar só ele.':''}</div>`:''}
-    ${!prevMode&&base!=null&&falta>0.009?`<label class="check"><input type="checkbox" id="impFalta" ${I.lancFalta!==false?'checked':''}> Lançar <b>${brl(falta)}</b> como "valor não detalhado" para o cartão ficar igual à fatura</label>`:''}
+    ${!prevMode&&base!=null&&falta>0.009?`<div class="atencao grid" style="gap:6px"><span>A soma dos lançamentos ficou <b>${brl(falta)}</b> abaixo do total da fatura (${brl(base)}). Confira se faltou alguma linha e, se faltou, lance à mão. O cartão vale a soma dos lançamentos.</span>
+      <label class="check"><input type="checkbox" id="impFalta" ${I.lancFalta===true?'checked':''}> Não achei: lançar ${brl(falta)} como "valor não detalhado da fatura"</label></div>`:''}
     ${!prevMode&&I.adiantado?`<div class="hint small grid" style="gap:10px"><span>Esta fatura teve <b>${brl(I.adiantado)}</b> pagos antes do fechamento${I.adiList.length>1?`, em ${I.adiList.length} pagamentos`:''}. Eles abatem a fatura, que fica em <b>${brl(totPdf)}</b>. Diga quem pagou cada um:</span>
       ${I.adiList.map((a,i)=>{ const sel=adiSel(I,i), ant=addM(I.mes,-1), meses=[...new Set([sel.mes0,ant,I.mes].filter(Boolean))], pess=cfg().pessoas||[];
         return `<div class="grid" style="gap:6px;background:var(--surface);border-radius:10px;padding:10px;color:var(--ink)"><b>${a.d?'Pagamento de '+esc(a.d):'Pagamento adiantado'}: ${brl(a.v)}</b>
@@ -2124,7 +2127,7 @@ async function doImport(){
     for(const [id,u] of upd) puts.push([id,u]);
     const criados=[];
     for(const r of R.novo.filter(r=>r.on)){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:r.desc,valor:r.valor,mesRef:M,parcRef:r.k&&r.n?r.k:1,nTotal:r.k&&r.n?r.n:1,quem:r.quem||'',grupo:'',cat:r.cat!==(autoCat(r.desc)||'Outros')?r.cat:'',data:r.data||'',origem:I.how==='claude'?'claude':'pdf',tipo:r.tipo,conferido:pm?{}:{[M]:true},suspeita:!!r.suspeita,fixo:r.fixo==='-'||S.lanc.some(l=>l.id===r.fixo)?r.fixo:''}]); }
-    if(!pm&&(I.compras!=null||I.total!=null)&&I.falta>0.009&&I.lancFalta!==false){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:r2(I.falta),mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}]); }
+    if(!pm&&(I.compras!=null||I.total!=null)&&I.falta>0.009&&I.lancFalta===true){ const nid=uid('c'); criados.push(nid); puts.push([nid,{cartao:card,desc:'Valor não detalhado da fatura',valor:r2(I.falta),mesRef:M,parcRef:1,nTotal:1,quem:'',grupo:'',cat:'Outros',data:'',origem:'total',tipo:'compra',conferido:{[M]:true},suspeita:false}]); }
     const lancs=[];
     if(!pm&&I.adiantado>0.005){ const fica=r2((I.totDepois||0)+(I.falta>0.009&&I.lancFalta!==false?I.falta:0)-I.total), vAd=Math.abs(fica-I.adiantado)<0.1?fica:r2(I.adiantado);
       const L=(I.adiList&&I.adiList.length?I.adiList:[{d:'',v:I.adiantado}]).map(a=>({...a,v:r2(a.v)})); L[L.length-1].v=r2(L[L.length-1].v+vAd-sum(L,a=>a.v));
