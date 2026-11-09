@@ -367,6 +367,7 @@ span.dot{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-
 /* o botão + nunca cobre o fim da tela */
 main{padding-bottom:110px}
 @media (max-width:820px){main{padding-bottom:calc(var(--nav-h) + 96px + env(safe-area-inset-bottom,0px))}}
+
 </style>
 
 <header class="top">
@@ -1394,12 +1395,12 @@ function tercCard(M,c){
   const T=Object.entries(c.tercInfo||{}).filter(([p,t])=>Math.abs(t.v)>=0.01); if(!T.length) return '';
   const tot=r2(sum(T.filter(([p,t])=>t.v>0),([p,t])=>t.v));
   return `<section class="card"><div class="sechead"><h2>Contas dos outros</h2><span class="sum" style="color:var(--third)">${brl(tot)}</span></div>
-    <p class="small muted" style="margin:0 0 6px">Compras nos seus cartões que são de outras pessoas. Não entram nas suas entradas nem nos seus gastos. Depois do vencimento, diga se a pessoa pagou: se não pagou, o valor passa a ser gasto seu.</p>
+    <p class="small muted" style="margin:0 0 6px">Compras nos seus cartões que são de outras pessoas. Não entram nas suas entradas nem nos seus gastos. Marque <b>Pagou</b> quando receber, mesmo antes do vencimento. Se marcar <b>Não pagou</b>, o valor passa a ser gasto seu.</p>
     <div class="rows">${T.map(([p,t])=>{ const neg=t.v<0;
-      const st=t.naoPagou?'<span class="chip bad">não pagou: virou gasto seu</span>':t.pagou?'<span class="chip ok">pagou ✓</span>':t.vencido?'<span class="chip">sem resposta: conta como pago</span>':'<span class="chip">fatura ainda não venceu</span>';
+      const st=t.naoPagou?'<span class="chip bad">não pagou: virou gasto seu</span>':t.pagou?'<span class="chip ok">pagou ✓</span>':t.vencido?'<span class="chip">sem resposta: conta como pago</span>':'<span class="chip">fatura ainda não venceu · marque quando receber</span>';
       return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><button class="d" data-act="gocard" data-quem="${esc(p)}" style="border:0;background:none;padding:0;text-align:left;font-weight:600;color:var(--ink)">${esc(p)}</button><span class="v" style="color:${neg?'var(--in)':'var(--third)'}">${neg?'crédito '+brl(-t.v):brl(t.v)}</span>
         <span class="sub">${neg?'<span class="chip ok">adiantou mais do que gastou</span>':st}</span>
-        ${t.vencido&&!neg?`<span style="grid-column:1 / -1" class="btnrow"><button class="btn${t.pagou?' pri':''}" style="padding:5px 12px" data-act="terc" data-p="${esc(p)}" data-v="${t.pagou?'':'pago'}">Pagou</button><button class="btn${t.naoPagou?' danger':''}" style="padding:5px 12px" data-act="terc" data-p="${esc(p)}" data-v="${t.naoPagou?'':'nao'}">Não pagou</button></span>`:''}</div>`; }).join('')}</div></section>`;
+        ${!neg?`<span style="grid-column:1 / -1" class="btnrow"><button class="btn${t.pagou?' pri':''}" style="padding:5px 12px" data-act="terc" data-p="${esc(p)}" data-v="${t.pagou?'':'pago'}">Pagou</button><button class="btn${t.naoPagou?' danger':''}" style="padding:5px 12px" data-act="terc" data-p="${esc(p)}" data-v="${t.naoPagou?'':'nao'}">Não pagou</button></span>`:''}</div>`; }).join('')}</div></section>`;
 }
 function mesResumo(M){
   const P=plano(M), al=alertas(M), ct=cortes(M), avg=mediaCats(M,3);
@@ -1611,7 +1612,7 @@ function viewCartoes(){
       return `<button class="row" data-act="editcompra" data-id="${esc(x.id)}" data-k="${esc(x.k)}"><span class="d">${esc(x.desc)}</span><span class="v" ${x.valor<0?'style="color:var(--in)"':''}>${brl(x.valor)}</span>
       <span class="sub">${x.data?`<span>${esc(x.data)}</span>`:''}${parc}${x.antecipada?'<span class="chip warn">paga adiantada</span>':''}${cf}${x.fixoDe?`<span class="chip ok">dentro do fixo: ${esc(x.fixoDe)}</span>`:x.fixoSug&&!x.fixo?`<span class="chip warn">parece de: ${esc(x.fixoSugDesc)}?</span>`:''}${x.descFat&&normDesc(x.descFat)!==normDesc(x.desc)?`<span class="chip">na fatura: ${esc(x.descFat)}</span>`:''}<span class="chip ${x.quem?'third':''}">${esc(quemLabel(x.quem))}</span><span class="chip">${esc(catOf(x))}</span></span>
       <span class="v2">${n>1&&rest>1&&!x.antecipada?'faltam '+brl(restante(x,M)):''}</span></button>`}).join('')||`<div class="empty">Nada previsto neste cartão em ${mLabel(M)}. Adicione uma compra ou confira a fatura em PDF.</div>`}</div>
-  </section>${(d=>d?`<section class="card atencao grid" style="gap:6px"><b>Os lançamentos mudaram depois da conferência</b><span>Hoje a soma das compras deste cartão é <b>${brl(k.total)}</b>; a fatura conferida tinha <b>${brl(k.total-d)}</b> (diferença de ${brl(Math.abs(d))}). O mês conta a soma dos lançamentos. Se a mudança foi de propósito (ex.: compra que é da próxima fatura), passe-a para o mês seguinte; se não, confira o que foi alterado.</span></section>`:'')(confDif(k))}${projCard(M,k)}${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
+  </section>${(d=>d?`<section class="card atencao grid" style="gap:6px"><b>Os lançamentos mudaram depois da conferência</b><span>Hoje a soma das compras deste cartão é <b>${brl(k.total)}</b>; a fatura conferida tinha <b>${brl(k.total-d)}</b> (diferença de ${brl(Math.abs(d))}). O mês conta a soma dos lançamentos. Se a mudança foi de propósito (ex.: compra que é da próxima fatura), passe-a para o mês seguinte; se não, confira o que foi alterado.</span></section>`:'')(confDif(k))}${k.terc?tercCard(M,c):''}${projCard(M,k)}${sugFixoHtml(M,k.id)}${cardReport(M,k)}</div>`;
 }
 
 /* ---------- Conferir fatura ---------- */
@@ -1781,8 +1782,8 @@ function ajustesHTML(){
   </div></details>
   <details class="set" ${open('cartoes')} data-sec="cartoes"><summary>Cartões e pagadores</summary><div class="body">
     <div class="eyebrow">Cartões</div>
-    <div class="hint small">🔒 Digite só um <b>apelido</b> para reconhecer o cartão (ex.: "Nubank da Nay", "Visa Caixa"). Não precisa do número, da validade nem do código. O app não pede e não guarda dados do cartão.</div>
-    <div class="setlist">${C.cartoes.map((c,i)=>`<div class="it" style="grid-template-columns:minmax(0,1fr) 92px auto"><input class="i" data-cfg="cartoes.${i}.nome" value="${esc(c.nome)}" placeholder="Apelido, ex.: Nubank da Nay" autocomplete="off" aria-label="Apelido do cartão"><input class="i num" data-cfg="cartoes.${i}.venc" value="${esc(c.venc||'')}" inputmode="numeric" placeholder="dia venc." aria-label="Dia de vencimento do cartão ${esc(c.nome)}"><button class="btn danger" data-act="cfgdel" data-k="cartoes" data-i="${i}" ${S.compras.some(x=>x.cartao===c.id)?'disabled title="Tem compras lançadas"':''}>Remover</button></div>`).join('')}</div>
+    <div class="hint small">🔒 Digite só um <b>apelido</b> para reconhecer o cartão (ex.: "Nubank da Ana", "Visa Caixa"). Não precisa do número, da validade nem do código. O app não pede e não guarda dados do cartão.</div>
+    <div class="setlist">${C.cartoes.map((c,i)=>`<div class="it" style="grid-template-columns:minmax(0,1fr) 92px auto"><input class="i" data-cfg="cartoes.${i}.nome" value="${esc(c.nome)}" placeholder="Apelido, ex.: Nubank da Ana" autocomplete="off" aria-label="Apelido do cartão"><input class="i num" data-cfg="cartoes.${i}.venc" value="${esc(c.venc||'')}" inputmode="numeric" placeholder="dia venc." aria-label="Dia de vencimento do cartão ${esc(c.nome)}"><button class="btn danger" data-act="cfgdel" data-k="cartoes" data-i="${i}" ${S.compras.some(x=>x.cartao===c.id)?'disabled title="Tem compras lançadas"':''}>Remover</button></div>`).join('')}</div>
     <div><button class="btn" data-act="cfgadd" data-k="cartoes">+ Cartão</button></div>
     <div class="eyebrow">Pagadores das faturas</div><p class="small muted" style="margin:0">Quem usa seus cartões e devolve o valor. Toda compra começa como "${EU}"; mude para o pagador quando não for sua.</p>
     <div class="setlist">${(C.pessoas||[]).map((p,i)=>`<div class="it two"><input class="i" data-cfg="pessoas.${i}" value="${esc(p)}" aria-label="Pagador"><button class="btn danger" data-act="cfgdel" data-k="pessoas" data-i="${i}" aria-label="Remover ${esc(p)}">×</button></div>`).join('')}</div>
@@ -2394,7 +2395,7 @@ function renderGate(){
   if(G.st==='lgpd'){ gate.innerHTML=`<div class="gatebox">${head}<h1>Antes de começar</h1>
     <p style="margin:0">Seus dados são seus. Veja como o ${APP} cuida deles, conforme a Lei Geral de Proteção de Dados (LGPD):</p>
     <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
-      <li><b>Cartões e contas:</b> só os apelidos que você escolher para organizar (ex.: "Nubank da Nay"). Nunca número, validade, código, agência, conta ou senha.</li>
+      <li><b>Cartões e contas:</b> só os apelidos que você escolher para organizar (ex.: "Nubank da Ana"). Nunca número, validade, código, agência, conta ou senha.</li>
       <li><b>O que o app guarda:</b> os valores e descrições que você digita ou importa das faturas e um e-mail mascarado para lembrar onde está o código de recuperação.</li>
       <li><b>Para quê:</b> só para você controlar as suas finanças.</li>
       <li><b>Onde fica:</b> só neste aparelho, criptografado com a sua senha. Nada vai para servidores; o criador do app não recebe nenhum dado.</li>
@@ -2649,7 +2650,7 @@ document.addEventListener('click',async e=>{
     case 'metafill': { const C=S.draftCfg; if(!C) return; const g=grupoSobra(C); g.meta=pct1((+g.meta||0)+100-metaTotal(C)); S.draftDirty=true; S.openSet='plano'; render(); toast(g.nome+' ficou com '+String(g.meta).replace('.',',')+'%'); break; }
     case 'cfgsave': { const C=S.draftCfg; if(!S.cfg&&!C.inicio) C.inicio=ymNow(); C.grupos.forEach(g=>{g.meta=pct1(Math.max(0,Math.min(100,num(g.meta))))});
       if(Math.abs(metaTotal(C)-100)>=0.05){ S.openSet='plano'; render(); const t=metaTotal(C); toast(t<100?`O plano precisa fechar 100%. Faltam ${String(pct1(100-t)).replace('.',',')}% para distribuir.`:`O plano passou de 100% (${String(t).replace('.',',')}%). Diminua algum grupo.`); setTimeout(()=>$('#metaInfo')?.scrollIntoView({block:'center'}),60); return; }
-      if(C.cartoes.some(k=>pareceDadoBancario(k.nome))||(C.pessoas||[]).some(pareceDadoBancario)){ toast('Parece um número de cartão ou de conta. Use só um apelido, como "Nubank da Nay".'); return; } C.pessoas=(C.pessoas||[]).map(s=>String(s).trim().slice(0,60)).filter(Boolean); C.grupos.forEach(g=>{g.meta=Math.max(0,Math.min(100,num(g.meta)));g.nome=String(g.nome).slice(0,60)}); C.diaPagamento=Math.max(1,Math.min(28,parseInt(C.diaPagamento)||10)); C.investInicial=num(C.investInicial); C.driveClientId=String(C.driveClientId||'').trim();
+      if(C.cartoes.some(k=>pareceDadoBancario(k.nome))||(C.pessoas||[]).some(pareceDadoBancario)){ toast('Parece um número de cartão ou de conta. Use só um apelido, como "Nubank da Ana".'); return; } C.pessoas=(C.pessoas||[]).map(s=>String(s).trim().slice(0,60)).filter(Boolean); C.grupos.forEach(g=>{g.meta=Math.max(0,Math.min(100,num(g.meta)));g.nome=String(g.nome).slice(0,60)}); C.diaPagamento=Math.max(1,Math.min(28,parseInt(C.diaPagamento)||10)); C.investInicial=num(C.investInicial); C.driveClientId=String(C.driveClientId||'').trim();
       if(C.driveClientId&&!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(C.driveClientId)){ toast('ID do Google inválido: precisa terminar em .apps.googleusercontent.com'); return; }
       C.cartoes.forEach(k=>{k.venc=Math.max(0,Math.min(31,parseInt(k.venc)||0))});
       const r0=cfg().reserva||{}; C.reserva={usar:C.reserva?.usar!==false,base:RES_BASES.includes(C.reserva?.base)?C.reserva.base:'fixos',cats:(Array.isArray(C.reserva?.cats)?C.reserva.cats:[]).map(x=>String(x).slice(0,60)).slice(0,100),valor:Math.max(0,num(C.reserva?.valor||0)),meses:Math.max(1,Math.min(24,parseInt(C.reserva?.meses)||6)),atual:num(C.reserva?.atual),desde:num(C.reserva?.atual)!==+(r0.atual||0)?ymNow():(r0.desde||null)};
